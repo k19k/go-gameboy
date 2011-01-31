@@ -141,7 +141,51 @@ func (gpu *GPU) scanline(ly byte) {
 	}
 
 	if mem.SpriteEnable {
-		// TODO
+		count := 0
+		idx := 0
+		// TODO sprite priorities for overlapping sprites at
+		// different x-coordinates (lower x-coordinate wins)
+		for idx < 0xA0 && count < 10 {
+			y := int(mem.oam[idx]) - 16; idx++
+			x := int(mem.oam[idx]) - 8; idx++
+			tile := int(mem.oam[idx]); idx++
+			info := mem.oam[idx]; idx++
+			h := 8
+			if mem.SpriteSize { h = 16; tile &= 0xFE }
+			if int(ly) < y || int(ly) >= y + h { continue }
+			count++
+			if x == -8 || x >= 168 { continue }
+			masked := info & 0x80 == 0x80
+			yflip := info & 0x40 == 0x40
+			xflip := info & 0x20 == 0x20
+			palidx := (info >> 4) & 1
+			tiley := int(ly) - y
+			if yflip { tiley = h - tiley }
+			tile = tile * 16 + tiley * 2
+			rect := &sdl.Rect{Y:int16(ly)*scale, W:scale, H:scale}
+			for i := 0; i < 8; i++ {
+				xi := x + i
+				if xi < 0 { continue }
+				if xi >= screenW { continue }
+				if masked {
+					px := gpu.mapAt(mem.BGMap,
+						xi + int(scx),
+						int(ly) + int(scy))
+					if px != 0 ||
+						xi > int(wx) ||
+						ly >= wy { continue }
+				}
+				bit := uint(i)
+				if !xflip { bit = uint(7 - i) }
+				px := (mem.vram[tile] >> bit) & 1
+				px |= ((mem.vram[tile+1] >> bit) & 1) << 1
+				if px != 0 {
+					color := gpu.pal[mem.OBP[palidx][px]]
+					rect.X = int16(xi) * scale
+					gpu.screen.FillRect(rect, color)
+				}
+			}
+		}
 	}
 }
 
