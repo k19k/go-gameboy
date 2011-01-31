@@ -470,8 +470,12 @@ func (cpu *CPU) fdx() int {
 		cpu.wh(cpu.fetchByte())
 		return 8/4
 	case 0x27:		// DAA
-		// not implemented!!!
-		panic(fmt.Sprintf("DAA not implemented! (PC=0x%04x)", cpu.pc-1))
+		if cpu.fn {
+			cpu.das()
+		} else {
+			cpu.daa()
+		}
+		return 4/4
 	case 0x28:		// JR Z,r8
 		return cpu.jr(cpu.fz)
 	case 0x29:		// ADD HL,HL
@@ -772,7 +776,7 @@ func (cpu *CPU) fdx() int {
 	case 0xDC:		// CALL C,a16
 		return cpu.call(cpu.fc)
 	case 0xDD: fmt.Printf("invalid opcode 0xDD"); return 1
-	case 0xDE:		// SBC A,d8
+	case 0xDE:		// SBC d8
 		cpu.sbc(cpu.fetchByte())
 		return 8/4
 	case 0xDF:		// RST 18H
@@ -1447,6 +1451,41 @@ func res(n, x byte) byte {
 
 func set(n, x byte) byte {
 	return x | 1 << n
+}
+
+// DAA and DAS implementations based on pseudocode from 80386
+// instruction set references.
+
+func (cpu *CPU) daa() {
+	if cpu.a & 0x0F > 9 || cpu.fh {
+		cpu.a += 6
+		cpu.fh = true
+	} else {
+		cpu.fh = false
+	}
+	if cpu.a > 0x9F || cpu.fc {
+		cpu.a += 0x60
+		cpu.fc = true
+	} else {
+		cpu.fc = false
+	}
+	cpu.fz = cpu.a == 0
+}
+
+func (cpu *CPU) das() {
+	if cpu.a & 0x0F > 9 || cpu.fh {
+		cpu.a -= 6
+		cpu.fh = true
+	} else {
+		cpu.fh = false
+	}
+	if cpu.a > 0x9F || cpu.fc {
+		cpu.a -= 0x60
+		cpu.fc = true
+	} else {
+		cpu.fc = false
+	}
+	cpu.fz = cpu.a == 0
 }
 
 func (cpu *CPU) af() uint16 {
