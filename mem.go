@@ -58,6 +58,10 @@ const (
 	JoypadAddr	= 0x0060
 )
 
+const (
+	divOverflow = 64
+)
+
 type MBC struct {
 	rom []byte
 	vram [0x2000]byte
@@ -83,6 +87,10 @@ type MBC struct {
 	// STAT flags
 	LYCInterrupt, OAMInterrupt, VBlankInterrupt, HBlankInterrupt bool
 	LCDMode byte
+
+	divTicks int
+	timaTicks int
+	timaOverflow int
 
 	BGP [4]byte
 	OBP [2][4]byte
@@ -290,7 +298,17 @@ func (mbc *MBC) ReadPort(addr uint16) byte {
 func (mbc *MBC) WritePort(addr uint16, x byte) {
 	switch addr {
 	case PortJOYP:
-		x = x & 0x30 | mbc.hram[0] & 0xF
+		x = x & 0x30 | 0xF // FIXME
+	case PortDIV:
+		x = 0
+	case PortTAC:
+		switch x & 3 {
+		case 0: mbc.timaOverflow = 256
+		case 1: mbc.timaOverflow = 4
+		case 2: mbc.timaOverflow = 16
+		case 3: mbc.timaOverflow = 64
+		}
+		mbc.timaTicks = 0
 	case PortLCDC:
 		mbc.LCDEnable = x & 0x80 != 0
 		mbc.WindowMap = x & 0x40 != 0
@@ -326,6 +344,28 @@ func (mbc *MBC) WritePort(addr uint16, x byte) {
 		mbc.dma(src)
 	}
 	mbc.hram[addr - 0xFF00] = x
+}
+
+func (mbc *MBC) UpdateTimers(t int) {
+	mbc.divTicks += t
+	if mbc.divTicks > divOverflow {
+		d := mbc.divTicks / divOverflow
+		mbc.hram[0x04] += byte(d)
+		mbc.divTicks -= d * divOverflow
+	}
+	if mbc.hram[0x07] & 4 == 0 { return }
+	mbc.timaTicks += t
+	if mbc.timaTicks > mbc.timaOverflow {
+		d := mbc.timaTicks / mbc.timaOverflow
+		x := int(mbc.hram[0x05]) + d
+		if x > 0xFF {
+			mbc.hram[0x05] = mbc.hram[0x06] + byte(x)
+			mbc.hram[0x0F] |= 0x04
+		} else {
+			mbc.hram[0x05] = byte(x)
+		}
+		mbc.timaTicks -= d * mbc.timaOverflow
+	}
 }
 
 func (mbc *MBC) dma(src uint16) {

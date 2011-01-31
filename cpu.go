@@ -46,6 +46,7 @@ func (cpu *CPU) Step() int {
 			t += cpu.irq(mask, f)
 		}
 	}
+	cpu.mmu.UpdateTimers(t)
 	return t
 }
 
