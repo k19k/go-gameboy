@@ -42,7 +42,6 @@ type GPU struct {
 	maps [4][mapW * mapH * 16]byte
 	screen *sdl.Surface
 	mmu *MBC
-	frameSkip bool
 	frameTime int64
 }
 
@@ -91,7 +90,7 @@ func (gpu *GPU) Step(t int) {
 			stat &^= 0x04
 		}
 	case modeVRAM:
-		if mem.LCDEnable && !gpu.frameSkip {
+		if mem.LCDEnable {
 			gpu.scanline(ly)
 		}
 	case modeHBlank:
@@ -103,13 +102,10 @@ func (gpu *GPU) Step(t int) {
 			irq |= 0x02
 		}
 		mem.WritePort(PortIF, irq | 0x01)
-		if !gpu.frameSkip {
-			if !mem.LCDEnable {
-				gpu.screen.FillRect(nil, gpu.pal[0])
-			}
-			gpu.screen.Flip()
+		if !mem.LCDEnable {
+			gpu.screen.FillRect(nil, gpu.pal[0])
 		}
-		gpu.frameSkip = !gpu.frameSkip
+		gpu.screen.Flip()
 		gpu.delay()
 	}
 
