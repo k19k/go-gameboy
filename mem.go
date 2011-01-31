@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 const (
 	PortJOYP = 0xFF00
@@ -93,6 +96,56 @@ func (m *MBC) String() string {
 	return fmt.Sprintf("<MBC %p>", m)
 }
 
+func (m *MBC) Dump(w io.Writer) {
+	var addr int
+
+	read := func () (x byte, e interface{}) {
+		defer func() {
+			e = recover()
+			addr++
+		}()
+		return m.ReadByte(uint16(addr)), e
+	}
+
+	fmt.Fprintf(w, "MEMORY DUMP ---- ROM BANK: %d -- ERAM BANK: %d\n",
+		m.romBank, m.eramBank)
+
+	for addr <= 0xFFFF {
+		fmt.Fprintf(w, "%04x  ", addr)
+		for x := 0; x < 8; x++ {
+			b, e := read()
+			if e == nil {
+				fmt.Fprintf(w, "%02x ", b)
+			} else {
+				fmt.Fprint(w, "?? ")
+			}
+		}
+		fmt.Fprint(w, " ")
+		for x := 0; x < 8; x++ {
+			b, e := read()
+			if e == nil {
+				fmt.Fprintf(w, "%02x ", b)
+			} else {
+				fmt.Fprint(w, "?? ")
+			}
+		}
+		addr -= 16
+		fmt.Fprint(w, " |")
+		for x := 0; x < 16; x++ {
+			b, e := read()
+			if e != nil {
+				fmt.Fprint(w, "?")
+			} else if b < 0x20 || b >= 0x7F {
+				fmt.Fprint(w, ".")
+			} else {
+				fmt.Fprintf(w, "%c", b)
+			}
+		}
+		fmt.Fprint(w, "\n")
+	}
+	fmt.Fprint(w, "\n")
+}
+
 func (m *MBC) ReadByte(addr uint16) byte {
 	switch {
 	case addr < 0x8000:
@@ -172,12 +225,6 @@ func (mbc *MBC) ReadROM(addr uint16) byte {
 	if addr < 0x4000 {
 		return mbc.rom[addr]
 	}
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Printf("romBank: %d\n", mbc.romBank)
-			panic(err)
-		}
-	} ()
 	return mbc.rom[int(addr) - 0x4000 + mbc.romBank * 0x4000]
 }
 

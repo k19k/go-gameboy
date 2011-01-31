@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type CPU struct {
 	a, b, c, d, e byte
@@ -8,6 +10,7 @@ type CPU struct {
 	fz, fn, fh, fc bool
 	ime, halt, pause bool
 	mmu *MBC
+	PC uint16
 }
 
 func NewCPU(mmu *MBC) *CPU {
@@ -31,14 +34,7 @@ func (cpu *CPU) String() string {
 func (cpu *CPU) Step() int {
 	t := 4
 	if !cpu.halt {
-		pc := cpu.pc
-		defer func() {
-			if err := recover(); err != nil {
-				fmt.Printf("panic in CPU step at %04Xh %s\n" +
-					"%v\n", pc, cpu.mmu.Disasm(pc), cpu)
-				panic(err)
-			}
-		} ()
+		cpu.PC = cpu.pc
 		//fmt.Printf("%04X %s\n", cpu.pc, cpu.mmu.Disasm(cpu.pc))
 		t = cpu.fdx()
 	}

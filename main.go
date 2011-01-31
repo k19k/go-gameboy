@@ -29,10 +29,24 @@ func main() {
 	mbc := NewMBC(rom)
 	cpu := NewCPU(mbc)
 	gpu := NewGPU(mbc)
-	run(cpu, gpu)
+	run(mbc, cpu, gpu)
 }
 
-func run(cpu *CPU, gpu *GPU) {
+func run(mbc *MBC, cpu *CPU, gpu *GPU) {
+	defer func() {
+		if e := recover(); e != nil {
+			fmt.Fprintf(os.Stderr,
+				"panic: %v\n\n" +
+				"LAST INSTRUCTION\n" +
+				"%04X\t%s\n\n" +
+				"CPU STATE\n" +
+				"%v\n\n",
+				e, cpu.PC, mbc.Disasm(cpu.PC), cpu)
+			mbc.Dump(os.Stderr)
+			fmt.Fprint(os.Stderr, "RUNTIME TRACE\n\n")
+			panic(e)
+		}
+	}()
 	t := 0
 	for {
 		if sig, ok := <-signal.Incoming; ok {
