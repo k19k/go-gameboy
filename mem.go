@@ -228,6 +228,11 @@ func (mbc *MBC) WriteROM(addr uint16, x byte) {
 	switch {
 	case addr >= 0x6000:
 		mbc.ramMode = x & 1 == 1
+		if mbc.ramMode {
+			mbc.romBank &= 0x1F
+		} else {
+			mbc.eramBank = 0
+		}
 	case addr >= 0x4000:
 		if mbc.ramMode {
 			mbc.eramBank = uint16(x) & 3
@@ -237,13 +242,13 @@ func (mbc *MBC) WriteROM(addr uint16, x byte) {
 			//fmt.Printf("rom.56 = %x (%02x)\n", x, mbc.romBank)
 		}
 	case addr >= 0x2000:
+		x &= 0x1F
+		if x == 0 { x = 1 }
 		mbc.romBank &= 0x60
-		mbc.romBank |= int(x) & 0x1F
-		if mbc.romBank & 0x0F == 0 {
-			mbc.romBank++
-		}
+		mbc.romBank |= int(x)
 		//fmt.Printf("rom.01234 = %x (%02x)\n", x & 0x1F, mbc.romBank)
 	}
+	//fmt.Printf("ROM BANK = %d   RAM BANK = %d\n", mbc.romBank, mbc.eramBank)
 }
 
 func (mbc *MBC) ReadVideoRAM(addr uint16) byte {
