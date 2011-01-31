@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -35,14 +36,8 @@ func main() {
 func run(mbc *MBC, cpu *CPU, gpu *GPU) {
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Fprintf(os.Stderr,
-				"panic: %v\n\n" +
-				"LAST INSTRUCTION\n" +
-				"%04X\t%s\n\n" +
-				"CPU STATE\n" +
-				"%v\n\n",
-				e, cpu.PC, mbc.Disasm(cpu.PC), cpu)
-			mbc.Dump(os.Stderr)
+			fmt.Fprintf(os.Stderr, "panic: %v\n\n", e)
+			Dump(os.Stderr, mbc, cpu)
 			fmt.Fprint(os.Stderr, "RUNTIME TRACE\n\n")
 			panic(e)
 		}
@@ -60,4 +55,14 @@ func run(mbc *MBC, cpu *CPU, gpu *GPU) {
 	}
 	fmt.Printf("total ticks: %d\n", t)
 	fmt.Printf("%v\n%v\n", cpu, cpu.mmu)
+}
+
+func Dump(w io.Writer, mbc *MBC, cpu *CPU) {
+	fmt.Fprintf(w,
+		"LAST INSTRUCTION\n" +
+		"%04X\t%s\n\n" +
+		"CPU STATE\n" +
+		"%v\n\n",
+		cpu.PC, mbc.Disasm(cpu.PC), cpu)
+	mbc.Dump(w)
 }
