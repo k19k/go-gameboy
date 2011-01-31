@@ -2,6 +2,7 @@ package main
 
 import (
 	"sdl"
+	"time"
 )
 
 const (
@@ -42,6 +43,7 @@ type GPU struct {
 	screen *sdl.Surface
 	mmu *MBC
 	frameSkip bool
+	frameTime int64
 }
 
 func NewGPU(m *MBC) *GPU {
@@ -53,7 +55,8 @@ func NewGPU(m *MBC) *GPU {
 	pal[3] = sdl.MapRGBA(screen.Format, 0x0F, 0x38, 0x0F, 0)
 	screen.FillRect(nil, pal[0])
 	screen.Flip()
-	return &GPU{pal: pal, screen: screen, mmu: m}
+	time := time.Nanoseconds()
+	return &GPU{pal: pal, screen: screen, mmu: m, frameTime: time}
 }
 
 func (gpu *GPU) Step(t int) {
@@ -107,9 +110,20 @@ func (gpu *GPU) Step(t int) {
 			gpu.screen.Flip()
 		}
 		gpu.frameSkip = !gpu.frameSkip
+		gpu.delay()
 	}
 
 	mem.WritePort(PortSTAT, stat)
+}
+
+func (gpu *GPU) delay() {
+	now := time.Nanoseconds()
+	delta := now - gpu.frameTime
+	target := 16742706 - delta
+	if target > 0 {
+		time.Sleep(target)
+	}
+	gpu.frameTime = time.Nanoseconds()
 }
 
 func (gpu *GPU) scanline(ly byte) {
