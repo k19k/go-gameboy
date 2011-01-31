@@ -753,7 +753,7 @@ func (cpu *CPU) fdx() int {
 		return 12/4
 	case 0xD2:		// JP NC,a16
 		return cpu.jp(!cpu.fc)
-	case 0xD3: fmt.Printf("invalid opcode 0xD3"); return 1
+	case 0xD3: panic("cpu: invalid opcode 0xD3")
 	case 0xD4: 		// CALL NC,a16
 		return cpu.call(!cpu.fc)
 	case 0xD5:		// PUSH DE
@@ -772,10 +772,10 @@ func (cpu *CPU) fdx() int {
 		return 16/4
 	case 0xDA:		// JP C,a16
 		return cpu.jp(cpu.fc)
-	case 0xDB: fmt.Printf("invalid opcode 0xDB"); return 1
+	case 0xDB: panic("cpu: invalid opcode 0xDB")
 	case 0xDC:		// CALL C,a16
 		return cpu.call(cpu.fc)
-	case 0xDD: fmt.Printf("invalid opcode 0xDD"); return 1
+	case 0xDD: panic("cpu: invalid opcode 0xDD")
 	case 0xDE:		// SBC d8
 		cpu.sbc(cpu.fetchByte())
 		return 8/4
@@ -793,8 +793,8 @@ func (cpu *CPU) fdx() int {
 		addr := 0xFF00 + uint16(cpu.c)
 		cpu.mmu.WritePort(addr, cpu.a)
 		return 8/4
-	case 0xE3: fmt.Printf("invalid opcode 0xE3"); return 1
-	case 0xE4: fmt.Printf("invalid opcode 0xE4"); return 1
+	case 0xE3: panic("cpu: invalid opcode 0xE3")
+	case 0xE4: panic("cpu: invalid opcode 0xE4")
 	case 0xE5:		// PUSH HL
 		cpu.push(cpu.hl)
 		return 16/4
@@ -813,9 +813,9 @@ func (cpu *CPU) fdx() int {
 	case 0xEA:		// LD (a16),A
 		cpu.mmu.WriteByte(cpu.fetchWord(), cpu.a)
 		return 16/4
-	case 0xEB: fmt.Printf("invalid opcode 0xEB"); return 1
-	case 0xEC: fmt.Printf("invalid opcode 0xEC"); return 1
-	case 0xED: fmt.Printf("invalid opcode 0xED"); return 1
+	case 0xEB: panic("cpu: invalid opcode 0xEB")
+	case 0xEC: panic("cpu: invalid opcode 0xEC")
+	case 0xED: panic("cpu: invalid opcode 0xED")
 	case 0xEE:		// XOR d8
 		cpu.xor(cpu.fetchByte())
 		return 8/4
@@ -836,7 +836,7 @@ func (cpu *CPU) fdx() int {
 	case 0xF3:		// DI
 		cpu.ime = false
 		return 4/4
-	case 0xF4: fmt.Printf("invalid opcode 0xF4"); return 1
+	case 0xF4: panic("cpu: invalid opcode 0xF4")
 	case 0xF5:		// PUSH AF
 		cpu.push(cpu.af())
 		return 16/4
@@ -858,8 +858,8 @@ func (cpu *CPU) fdx() int {
 	case 0xFB:		// EI
 		cpu.ime = true
 		return 4/4
-	case 0xFC: fmt.Printf("invalid opcode 0xFC"); return 1
-	case 0xFD: fmt.Printf("invalid opcode 0xFD"); return 1
+	case 0xFC: panic("cpu: invalid opcode 0xFC")
+	case 0xFD: panic("cpu: invalid opcode 0xFD")
 	case 0xFE: 		// CP d8
 		cpu.cp(cpu.fetchByte())
 		return 8/4
