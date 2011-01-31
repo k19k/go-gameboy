@@ -39,7 +39,6 @@ const (
 type GPU struct {
 	clock int
 	pal []uint32
-	maps [4][mapW * mapH * 16]byte
 	screen *sdl.Surface
 	mmu *MBC
 	frameTime int64
@@ -125,10 +124,6 @@ func (gpu *GPU) delay() {
 func (gpu *GPU) scanline(ly byte) {
 	mem := gpu.mmu
 
-	if ly == 0 && mem.vramDirty {
-		gpu.update()
-	}
-
 	scy := mem.ReadPort(PortSCY)
 	scx := mem.ReadPort(PortSCX)
 	wy := mem.ReadPort(PortWY)
@@ -170,43 +165,24 @@ func (gpu *GPU) rleline(map1 bool, x, y, xoff, yoff byte) {
 }
 
 func (gpu *GPU) mapAt(map1 bool, x, y int) byte {
-	idx := 0
-	if map1 { idx = 2 }
-	if !gpu.mmu.TileData { idx++ }
-	n := ((y / tileH) * mapW + (x / tileW)) * 16
-	n += (y % tileH) * 2
-	b := uint(tileW - 1 - x % tileW)
-	lo := (gpu.maps[idx][n] >> b) & 1
-	hi := ((gpu.maps[idx][n+1] >> b) & 1) << 1
-	return hi | lo
-}
-
-func (gpu *GPU) update() {
 	mem := gpu.mmu
-	for i := 0; i < 2048; i++ {
-		tile := int(mem.vram[0x1800 + i])
-		idx  := (i / 1024) * 2
-		x := (i & 0x03FF) * 16 // (i % 1024) * 16
-		if mem.mapDirty[i] || mem.tileDirty[tile] {
-			src := tile * 16
-			for n := 0; n < 16; n++ {
-				gpu.maps[idx][x+n] = mem.vram[src+n]
-			}
-		}
-		tile = int(int8(tile)) + 256
-		idx++
-		if mem.mapDirty[i] || mem.tileDirty[tile] {
-			src := tile * 16
-			for n := 0; n < 16; n++ {
-				gpu.maps[idx][x+n] = mem.vram[src+n]
-			}
-		}
-		mem.mapDirty[i] = false
+	idx := (y / tileH) * mapW + x / tileW
+	if map1 {
+		idx += 0x1C00
+	} else {
+		idx += 0x1800
 	}
-	for i := 0; i < 384; i++ {
-		mem.tileDirty[i] = false
+	tile := mem.vram[idx]
+	if mem.TileData {
+		idx = int(tile) * 16
+	} else {
+		idx = 0x1000 + int(int8(tile)) * 16
 	}
-	mem.vramDirty = false
+	idx += (y % tileH) * 2
+	bit := uint(tileW - 1 - x % tileW)
+	px := (mem.vram[idx] >> bit) & 1
+	px |= ((mem.vram[idx+1] >> bit) & 1) << 1
+	return px
 }
 
 func calcMode(t int, ly byte) byte {

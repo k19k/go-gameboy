@@ -70,10 +70,6 @@ type MBC struct {
 	eramBank uint16
 	ramMode bool
 
-	tileDirty [384]bool
-	mapDirty [2048]bool
-	vramDirty bool
-
 	// LCDC flags
 	LCDEnable bool
 	WindowMap bool
@@ -255,16 +251,7 @@ func (mbc *MBC) ReadVideoRAM(addr uint16) byte {
 }
 
 func (mbc *MBC) WriteVideoRAM(addr uint16, x byte) {
-	if mbc.vram[addr - 0x8000] != x {
-		mbc.vramDirty = true
-		if addr < 0x9800 {
-			idx := (addr - 0x8000) / 16
-			mbc.tileDirty[idx] = true
-		} else {
-			mbc.mapDirty[addr - 0x9800] = true
-		}
-		mbc.vram[addr - 0x8000] = x
-	}
+	mbc.vram[addr - 0x8000] = x
 }
 
 func (mbc *MBC) ReadExternalRAM(addr uint16) byte {
