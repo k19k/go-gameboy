@@ -1,10 +1,6 @@
-include $(GOROOT)/src/Make.inc
+all clean nuke:
+	$(MAKE) -C pkg $@
+	$(MAKE) -C cmd $@
 
-TARG=gameboy
-GOFILES=\
-	mem.go\
-	cpu.go\
-	gpu.go\
-	main.go
-
-include $(GOROOT)/src/Make.cmd
+testpackage:
+	$(MAKE) -C pkg $@

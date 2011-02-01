@@ -1,4 +1,4 @@
-package main
+package gameboy
 
 import (
 	"fmt"
@@ -62,6 +62,16 @@ const (
 const (
 	divOverflow = 64
 )
+
+type MemoryUnit interface {
+	ReadByte(addr uint16) byte
+	WriteByte(addr uint16, x byte)
+	ReadWord(addr uint16) uint16
+	WriteWord(addr uint16, x uint16)
+	ReadPort(addr uint16) byte
+	WritePort(addr uint16, x byte)
+	UpdateTimers(t int)
+}
 
 type MBC struct {
 	rom []byte

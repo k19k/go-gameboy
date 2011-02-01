@@ -1,39 +1,35 @@
-package main
+package gameboy
 
 import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sdl"
 	"os"
 	"os/signal"
-	"sdl"
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf("usage: %s rom\n", os.Args[0])
-		return
-	}
-
+func Start(path string) (ch chan int, error interface{}) {
 	rom, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err);
-		return
+		return nil, err
 	}
 
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {
-		fmt.Fprintf(os.Stderr, "%v\n", sdl.GetError())
-		return
+		return nil, sdl.GetError()
 	}
-	defer sdl.Quit()
 
 	mbc := NewMBC(rom)
 	cpu := NewCPU(mbc)
 	gpu := NewGPU(mbc)
-	run(mbc, cpu, gpu)
+
+	ch = make(chan int)
+	go run(ch, mbc, cpu, gpu)
+	return ch, nil
 }
 
-func run(mbc *MBC, cpu *CPU, gpu *GPU) {
+func run(quit chan int, mbc *MBC, cpu *CPU, gpu *GPU) {
+	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Fprintf(os.Stderr, "panic: %v\n\n", e)
@@ -42,11 +38,11 @@ func run(mbc *MBC, cpu *CPU, gpu *GPU) {
 			panic(e)
 		}
 	}()
+
 	t := 0
 	for {
 		if sig, ok := <-signal.Incoming; ok {
 			fmt.Printf("\rReceived %v, cleaning up\n", sig)
-			//Dump(os.Stderr, mbc, cpu)
 			break
 		}
 		var s int
@@ -56,6 +52,8 @@ func run(mbc *MBC, cpu *CPU, gpu *GPU) {
 	}
 	fmt.Printf("total ticks: %d\n", t)
 	fmt.Printf("%v\n%v\n", cpu, cpu.mmu)
+
+	quit <- 0
 }
 
 func Dump(w io.Writer, mbc *MBC, cpu *CPU) {

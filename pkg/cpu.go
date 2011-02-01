@@ -1,4 +1,4 @@
-package main
+package gameboy
 
 import (
 	"fmt"
@@ -10,12 +10,12 @@ type CPU struct {
 	hl, pc, sp uint16
 	fz, fn, fh, fc bool
 	ime, halt, pause bool
-	mmu *MBC
+	mmu MemoryUnit
 	PC uint16
 	stack uint16
 }
 
-func NewCPU(mmu *MBC) *CPU {
+func NewCPU(mmu MemoryUnit) *CPU {
 	return &CPU { a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
 		hl: 0x014D, pc: 0x0100, sp: 0xFFFE,
 		fz: true, fn: false, fh: true, fc: true,
