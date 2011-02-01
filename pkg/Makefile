@@ -4,7 +4,7 @@ TARG=gameboy
 GOFILES=\
 	memory.go\
 	cpu.go\
-	lcd.go\
+	display.go\
 	system.go
 
 include $(GOROOT)/src/Make.pkg

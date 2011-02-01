@@ -19,13 +19,13 @@ const (
 	tileH = 8
 	mapW = 32
 	mapH = 32
-	lcdW = tileW * tilesX
-	lcdH = tileH * tilesY
+	displayW = tileW * tilesX
+	displayH = tileH * tilesY
 
 	scale = 3
 
-	screenW = lcdW * scale
-	screenH = lcdH * scale
+	screenW = displayW * scale
+	screenH = displayH * scale
 
 	hblankTicks = 204/4
 	vblankTicks = 4560/4
@@ -36,7 +36,7 @@ const (
 	refreshTicks  = scanlineTicks * screenH + vblankTicks
 )
 
-type lcd struct {
+type display struct {
 	*memory
 	*sdl.Surface
 	clock int
@@ -44,7 +44,7 @@ type lcd struct {
 	frameTime int64
 }
 
-func newLCD(m *memory) *lcd {
+func newDisplay(m *memory) *display {
 	screen := sdl.SetVideoMode(screenW, screenH, 0, sdl.DOUBLEBUF)
 	pal := make([]uint32, 4)
 	pal[0] = sdl.MapRGBA(screen.Format, 0x9B, 0xBC, 0x0F, 0)
@@ -54,102 +54,102 @@ func newLCD(m *memory) *lcd {
 	screen.FillRect(nil, pal[0])
 	screen.Flip()
 	time := time.Nanoseconds()
-	return &lcd{memory: m, Surface: screen,	pal: pal, frameTime: time}
+	return &display{memory: m, Surface: screen, pal: pal, frameTime: time}
 }
 
-func (scr *lcd) step(t int) {
-	scr.clock += t
-	if scr.clock >= refreshTicks {
-		scr.clock -= refreshTicks
+func (lcd *display) step(t int) {
+	lcd.clock += t
+	if lcd.clock >= refreshTicks {
+		lcd.clock -= refreshTicks
 	}
 
-	ly := byte(scr.clock / scanlineTicks)
-	scr.writePort(portLY, ly)
-	mode := calcMode(scr.clock, ly)
-	if mode == scr.lcdMode {
+	ly := byte(lcd.clock / scanlineTicks)
+	lcd.writePort(portLY, ly)
+	mode := calcMode(lcd.clock, ly)
+	if mode == lcd.lcdMode {
 		return;
 	}
-	scr.lcdMode = mode
+	lcd.lcdMode = mode
 
-	stat := scr.readPort(portSTAT) &^ 3 | mode
-	irq := scr.readPort(portIF)
+	stat := lcd.readPort(portSTAT) &^ 3 | mode
+	irq := lcd.readPort(portIF)
 
 	switch mode {
 	case modeOAM:
-		if scr.oamInterrupt {
-			scr.writePort(portIF, irq | 0x02)
+		if lcd.oamInterrupt {
+			lcd.writePort(portIF, irq | 0x02)
 		}
-		if lyc := scr.readPort(portLYC); ly-1 == lyc {
+		if lyc := lcd.readPort(portLYC); ly-1 == lyc {
 			stat |= 0x04
-			if scr.lycInterrupt {
-				scr.writePort(portIF, irq | 0x02)
+			if lcd.lycInterrupt {
+				lcd.writePort(portIF, irq | 0x02)
 			}
 		} else {
 			stat &^= 0x04
 		}
 	case modeVRAM:
-		if scr.lcdEnable {
-			scr.scanline(ly)
+		if lcd.lcdEnable {
+			lcd.scanline(ly)
 		}
 	case modeHBlank:
-		if scr.hblankInterrupt {
-			scr.writePort(portIF, irq | 0x02)
+		if lcd.hblankInterrupt {
+			lcd.writePort(portIF, irq | 0x02)
 		}
 	case modeVBlank:
-		if scr.vblankInterrupt {
+		if lcd.vblankInterrupt {
 			irq |= 0x02
 		}
-		scr.writePort(portIF, irq | 0x01)
-		if !scr.lcdEnable {
-			scr.FillRect(nil, scr.pal[0])
+		lcd.writePort(portIF, irq | 0x01)
+		if !lcd.lcdEnable {
+			lcd.FillRect(nil, lcd.pal[0])
 		}
-		scr.Flip()
-		scr.delay()
-		scr.pumpEvents()
+		lcd.Flip()
+		lcd.delay()
+		lcd.pumpEvents()
 	}
 
-	scr.writePort(portSTAT, stat)
+	lcd.writePort(portSTAT, stat)
 }
 
-func (scr *lcd) delay() {
+func (lcd *display) delay() {
 	now := time.Nanoseconds()
-	delta := now - scr.frameTime
+	delta := now - lcd.frameTime
 	target := 16742706 - delta
 	if target > 0 {
 		time.Sleep(target)
 	}
-	scr.frameTime = time.Nanoseconds()
+	lcd.frameTime = time.Nanoseconds()
 }
 
-func (scr *lcd) scanline(ly byte) {
-	scy := scr.readPort(portSCY)
-	scx := scr.readPort(portSCX)
-	wy := scr.readPort(portWY)
-	wx := scr.readPort(portWX)
+func (lcd *display) scanline(ly byte) {
+	scy := lcd.readPort(portSCY)
+	scx := lcd.readPort(portSCX)
+	wy := lcd.readPort(portWY)
+	wx := lcd.readPort(portWX)
 
-	if scr.bgEnable {
-		scr.rleline(scr.bgMap, byte(0), ly, scx, scy)
+	if lcd.bgEnable {
+		lcd.rleline(lcd.bgMap, byte(0), ly, scx, scy)
 	}
 
-	if scr.windowEnable && wx < 167 && wy < 144 && ly >= wy {
+	if lcd.windowEnable && wx < 167 && wy < 144 && ly >= wy {
 		x := int(wx) - 7
 		xoff := -x
 		if x < 0 { x = 0 }
-		scr.rleline(scr.windowMap, byte(x), ly, byte(xoff), byte(-wy))
+		lcd.rleline(lcd.windowMap, byte(x), ly, byte(xoff), byte(-wy))
 	}
 
-	if scr.spriteEnable {
+	if lcd.spriteEnable {
 		count := 0
 		idx := 0
 		// TODO sprite priorities for overlapping sprites at
 		// different x-coordinates (lower x-coordinate wins)
 		for idx < 0xA0 && count < 10 {
-			y := int(scr.oam[idx]) - 16; idx++
-			x := int(scr.oam[idx]) - 8; idx++
-			tile := int(scr.oam[idx]); idx++
-			info := scr.oam[idx]; idx++
+			y := int(lcd.oam[idx]) - 16; idx++
+			x := int(lcd.oam[idx]) - 8; idx++
+			tile := int(lcd.oam[idx]); idx++
+			info := lcd.oam[idx]; idx++
 			h := 8
-			if scr.spriteSize { h = 16; tile &= 0xFE }
+			if lcd.spriteSize { h = 16; tile &= 0xFE }
 			if int(ly) < y || int(ly) >= y + h { continue }
 			count++
 			if x == -8 || x >= 168 { continue }
@@ -166,7 +166,7 @@ func (scr *lcd) scanline(ly byte) {
 				if xi < 0 { continue }
 				if xi >= screenW { continue }
 				if masked {
-					px := scr.mapAt(scr.bgMap,
+					px := lcd.mapAt(lcd.bgMap,
 						xi + int(scx),
 						int(ly) + int(scy))
 					if px != 0 ||
@@ -175,27 +175,27 @@ func (scr *lcd) scanline(ly byte) {
 				}
 				bit := uint(i)
 				if !xflip { bit = uint(7 - i) }
-				px := (scr.vram[tile] >> bit) & 1
-				px |= ((scr.vram[tile+1] >> bit) & 1) << 1
+				px := (lcd.vram[tile] >> bit) & 1
+				px |= ((lcd.vram[tile+1] >> bit) & 1) << 1
 				if px != 0 {
-					color := scr.pal[scr.obp[palidx][px]]
+					color := lcd.pal[lcd.obp[palidx][px]]
 					rect.X = int16(xi) * scale
-					scr.FillRect(rect, color)
+					lcd.FillRect(rect, color)
 				}
 			}
 		}
 	}
 }
 
-func (scr *lcd) rleline(map1 bool, x, y, xoff, yoff byte) {
+func (lcd *display) rleline(map1 bool, x, y, xoff, yoff byte) {
 	r := &sdl.Rect{ X: int16(x) * scale,
 		Y: int16(y) * scale, W: scale, H: scale }
 	y += yoff
-	cur := scr.mapAt(map1, int(x + xoff), int(y))
-	for x++; x < lcdW; x++ {
-		b := scr.mapAt(map1, int(x + xoff), int(y))
+	cur := lcd.mapAt(map1, int(x + xoff), int(y))
+	for x++; x < displayW; x++ {
+		b := lcd.mapAt(map1, int(x + xoff), int(y))
 		if b != cur {
-			scr.FillRect(r, scr.pal[scr.bgp[cur]])
+			lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
 			cur = b
 			r.X = int16(x) * scale
 			r.W = scale
@@ -203,31 +203,31 @@ func (scr *lcd) rleline(map1 bool, x, y, xoff, yoff byte) {
 			r.W += scale
 		}
 	}
-	scr.FillRect(r, scr.pal[scr.bgp[cur]])
+	lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
 }
 
-func (scr *lcd) mapAt(map1 bool, x, y int) byte {
+func (lcd *display) mapAt(map1 bool, x, y int) byte {
 	idx := (y / tileH) * mapW + x / tileW
 	if map1 {
 		idx += 0x1C00
 	} else {
 		idx += 0x1800
 	}
-	tile := scr.vram[idx]
-	if scr.tileData {
+	tile := lcd.vram[idx]
+	if lcd.tileData {
 		idx = int(tile) * 16
 	} else {
 		idx = 0x1000 + int(int8(tile)) * 16
 	}
 	idx += (y % tileH) * 2
 	bit := uint(tileW - 1 - x % tileW)
-	px := (scr.vram[idx] >> bit) & 1
-	px |= ((scr.vram[idx+1] >> bit) & 1) << 1
+	px := (lcd.vram[idx] >> bit) & 1
+	px |= ((lcd.vram[idx+1] >> bit) & 1) << 1
 	return px
 }
 
 func calcMode(t int, ly byte) byte {
-	if ly >= lcdH {
+	if ly >= displayH {
 		return modeVBlank
 	}
 	t %= scanlineTicks

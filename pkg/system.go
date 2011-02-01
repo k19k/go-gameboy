@@ -21,14 +21,14 @@ func Start(path string) (ch chan int, error interface{}) {
 
 	mem := newMemory(rom)
 	sys := newCPU(mem)
-	scr := newLCD(mem)
+	lcd := newDisplay(mem)
 
 	ch = make(chan int)
-	go run(ch, sys, scr)
+	go run(ch, sys, lcd)
 	return ch, nil
 }
 
-func run(quit chan int, sys *cpu, scr *lcd) {
+func run(quit chan int, sys *cpu, lcd *display) {
 	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
@@ -47,7 +47,7 @@ func run(quit chan int, sys *cpu, scr *lcd) {
 		}
 		var s int
 		for s = 0; s < 10; s += sys.step() {}
-		scr.step(s)
+		lcd.step(s)
 		t += s
 	}
 	fmt.Printf("total ticks: %d\n", t)
