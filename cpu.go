@@ -18,8 +18,8 @@ func NewCPU(mmu *MBC) *CPU {
 		hl: 0x014D, pc: 0x0100, sp: 0xFFFE,
 		fz: true, fn: false, fh: true, fc: true,
 		ime: true, halt: false, pause: true,
-		mmu: mmu }
-		
+		mmu: mmu,
+		PC: 0x0100 }
 }
 
 func (cpu *CPU) String() string {
@@ -74,7 +74,12 @@ func (cpu *CPU) irq(mask, f byte) int {
 	return 32/4
 }
 
-func (mmu *MBC) Disasm(addr uint16) string {
+func (mmu *MBC) Disasm(addr uint16) (result string) {
+	defer func() {
+		if e := recover(); e != nil {
+			result = "(read failed!)"
+		}
+	}()
 	code := mmu.ReadByte(addr)
 	imm8 := mmu.ReadByte(addr+1)
 	imm16 := mmu.ReadWord(addr+1)
