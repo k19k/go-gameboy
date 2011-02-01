@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"sdl"
 )
 
 const (
@@ -91,6 +92,9 @@ type MBC struct {
 	divTicks int
 	timaTicks int
 	timaOverflow int
+
+	dpadBits byte
+	btnBits byte
 
 	BGP [4]byte
 	OBP [2][4]byte
@@ -201,8 +205,8 @@ func (m *MBC) WriteWord(addr uint16, x uint16) {
 }
 
 func NewMBC(rom []byte) *MBC {
-	mbc := &MBC{rom: rom}
-	mbc.hram[0x00] = 0x3F
+	mbc := &MBC{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+	mbc.WritePort(PortJOYP, 0x30)
 	mbc.WritePort(PortNR10, 0x80)
 	mbc.WritePort(PortNR11, 0xBF)
 	mbc.WritePort(PortNR12, 0xF3)
@@ -298,7 +302,13 @@ func (mbc *MBC) ReadPort(addr uint16) byte {
 func (mbc *MBC) WritePort(addr uint16, x byte) {
 	switch addr {
 	case PortJOYP:
-		x = x & 0x30 | 0xF // FIXME
+		x &= 0x30
+		switch x {
+		case 0x00: x |= 0x0F
+		case 0x10: x |= mbc.btnBits
+		case 0x20: x |= mbc.dpadBits
+		case 0x30: x |= 0x0F
+		}
 	case PortDIV:
 		x = 0
 	case PortTAC:
@@ -372,5 +382,38 @@ func (mbc *MBC) dma(src uint16) {
 	for i := 0; i < 0xA0; i++ {
 		mbc.oam[i] = mbc.ReadByte(src)
 		src++
+	}
+}
+
+func (mbc *MBC) PumpEvents() {
+	var ev sdl.Event
+	for ev.Poll() {
+		// TODO trigger interrupts
+		switch ev.Type {
+		case sdl.KEYUP:
+			kev := ev.Keyboard()
+			switch kev.Keysym.Sym {
+			case sdl.K_DOWN:   mbc.dpadBits |= 0x08
+			case sdl.K_UP:     mbc.dpadBits |= 0x04
+			case sdl.K_LEFT:   mbc.dpadBits |= 0x02
+			case sdl.K_RIGHT:  mbc.dpadBits |= 0x01
+			case sdl.K_RETURN: mbc.btnBits  |= 0x08
+			case sdl.K_RSHIFT: mbc.btnBits  |= 0x04
+			case sdl.K_z:      mbc.btnBits  |= 0x02
+			case sdl.K_x:      mbc.btnBits  |= 0x01
+			}
+		case sdl.KEYDOWN:
+			kev := ev.Keyboard()
+			switch kev.Keysym.Sym {
+			case sdl.K_DOWN:   mbc.dpadBits &^= 0x08
+			case sdl.K_UP:     mbc.dpadBits &^= 0x04
+			case sdl.K_LEFT:   mbc.dpadBits &^= 0x02
+			case sdl.K_RIGHT:  mbc.dpadBits &^= 0x01
+			case sdl.K_RETURN: mbc.btnBits  &^= 0x08
+			case sdl.K_RSHIFT: mbc.btnBits  &^= 0x04
+			case sdl.K_z:      mbc.btnBits  &^= 0x02
+			case sdl.K_x:      mbc.btnBits  &^= 0x01
+			}
+		}
 	}
 }

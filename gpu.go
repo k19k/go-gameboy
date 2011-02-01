@@ -106,6 +106,7 @@ func (gpu *GPU) Step(t int) {
 		}
 		gpu.screen.Flip()
 		gpu.delay()
+		mem.PumpEvents()
 	}
 
 	mem.WritePort(PortSTAT, stat)
