@@ -5,89 +5,89 @@ import (
 	"io"
 )
 
-type CPU struct {
-	*MBC
+type cpu struct {
+	*memory
 	a, b, c, d, e byte
 	hl, pc, sp uint16
 	fz, fn, fh, fc bool
 	ime, halt, pause bool
-	PC uint16
+	mar uint16
 	stack uint16
 }
 
-func NewCPU(mmu *MBC) *CPU {
-	return &CPU { MBC: mmu,
+func newCPU(m *memory) *cpu {
+	return &cpu { memory: m,
 	        a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
 		hl: 0x014D, pc: 0x0100, sp: 0xFFFE,
 		fz: true, fn: false, fh: true, fc: true,
 		ime: true, halt: false, pause: true,
-		PC: 0x0100, stack: 0xFFFE }
+		mar: 0x0100, stack: 0xFFFE }
 }
 
-func (cpu *CPU) String() string {
+func (sys *cpu) String() string {
 	return fmt.Sprintf(
-		"<CPU AF=%04X BC=%04X DE=%04X HL=%04X\n" +
+		"<cpu AF=%04X BC=%04X DE=%04X HL=%04X\n" +
 		"     PC=%04X SP=%04X\n" +
 		"     IME=%t Halt=%t Pause=%t>",
-		cpu.af(), cpu.bc(), cpu.de(), cpu.hl,
-		cpu.pc, cpu.sp, cpu.ime, cpu.halt, cpu.pause)
+		sys.af(), sys.bc(), sys.de(), sys.hl,
+		sys.pc, sys.sp, sys.ime, sys.halt, sys.pause)
 }
 
-func (cpu *CPU) Step() int {
+func (sys *cpu) step() int {
 	t := 4
-	if !cpu.halt {
-		cpu.PC = cpu.pc
-		//fmt.Printf("%04X %s\n", cpu.pc, cpu.Disasm(cpu.pc))
-		t = cpu.fdx()
+	if !sys.halt {
+		sys.mar = sys.pc
+		//fmt.Printf("%04X %s\n", sys.pc, sys.Disasm(sys.pc))
+		t = sys.fdx()
 	}
-	if cpu.ime {
-		f := cpu.ReadPort(PortIF)
-		e := cpu.ReadPort(PortIE)
+	if sys.ime {
+		f := sys.readPort(portIF)
+		e := sys.readPort(portIE)
 		mask := f & e & 0x1F
 		if mask != 0 {
-			t += cpu.irq(mask, f)
+			t += sys.irq(mask, f)
 		}
 	}
-	cpu.UpdateTimers(t)
+	sys.updateTimers(t)
 	return t
 }
 
-func (cpu *CPU) irq(mask, f byte) int {
-	cpu.ime = false
-	cpu.halt = false
-	cpu.push(cpu.pc)
+func (sys *cpu) irq(mask, f byte) int {
+	sys.ime = false
+	sys.halt = false
+	sys.push(sys.pc)
 	if mask & 0x01 != 0 {
-		cpu.pc = VBlankAddr
+		sys.pc = vblankAddr
 		f &^= 0x01
 	} else if mask & 0x02 != 0 {
-		cpu.pc = LCDStatusAddr
+		sys.pc = lcdStatusAddr
 		f &^= 0x02
 	} else if mask & 0x04 != 0 {
-		cpu.pc = TimerAddr
+		sys.pc = timerAddr
 		f &^= 0x04
 	} else if mask & 0x08 != 0 {
-		cpu.pc = SerialAddr
+		sys.pc = serialAddr
 		f &^= 0x08
 	} else if mask & 0x10 != 0 {
-		cpu.pc = JoypadAddr
+		sys.pc = joypadAddr
 		f &^= 0x10
 	}
-	cpu.WritePort(PortIF, f)
+	sys.writePort(portIF, f)
 	return 32/4
 }
 
-func (cpu *CPU) DumpStack(w io.Writer) {
-	addr := cpu.stack-2
+func (sys *cpu) dumpStack(w io.Writer) {
+	addr := sys.stack-2
 	read := func() (x uint16, e interface{}) {
 		defer func() {
 			addr -= 2
 			e = recover()
 		}()
-		return cpu.ReadWord(addr), e
+		return sys.readWord(addr), e
 	}
 	fmt.Fprintln(w, "STACK ┬")
-	for addr >= cpu.sp {
-		if addr == cpu.sp {
+	for addr >= sys.sp {
+		if addr == sys.sp {
 			fmt.Fprintf(w, "   SP ╰→ ")
 		} else {
 			fmt.Fprintf(w, "      │  ")
@@ -103,15 +103,15 @@ func (cpu *CPU) DumpStack(w io.Writer) {
 	fmt.Fprintln(w)
 }
 
-func (mmu *MBC) Disasm(addr uint16) (result string) {
+func (m *memory) disasm(addr uint16) (result string) {
 	defer func() {
 		if e := recover(); e != nil {
 			result = "(read failed!)"
 		}
 	}()
-	code := mmu.ReadByte(addr)
-	imm8 := mmu.ReadByte(addr+1)
-	imm16 := mmu.ReadWord(addr+1)
+	code := m.readByte(addr)
+	imm8 := m.readByte(addr+1)
+	imm16 := m.readWord(addr+1)
 	rel8 := int8(imm8)
 	jra := addr + 2 + uint16(rel8)
 	switch code {
@@ -381,1100 +381,1100 @@ func (mmu *MBC) Disasm(addr uint16) (result string) {
 }
 
 // Returns the time in cycles/4.  One cycle = 1/4194304 seconds.
-func (cpu *CPU) fdx() int {
-	switch cpu.fetchByte() {
+func (sys *cpu) fdx() int {
+	switch sys.fetchByte() {
 	case 0x00:		// NOP
 		return 4/4
 	case 0x01:		// LD BC,d16
-		cpu.wbc(cpu.fetchWord())
+		sys.wbc(sys.fetchWord())
 		return 12/4
 	case 0x02:		// LD (BC),A
-		cpu.WriteByte(cpu.bc(), cpu.a)
+		sys.writeByte(sys.bc(), sys.a)
 		return 8/4
 	case 0x03:		// INC BC
-		cpu.wbc(cpu.bc() + 1)
+		sys.wbc(sys.bc() + 1)
 		return 8/4
 	case 0x04:		// INC B
-		cpu.b = cpu.inc(cpu.b)
+		sys.b = sys.inc(sys.b)
 		return 4/4
 	case 0x05:		// DEC B
-		cpu.b = cpu.dec(cpu.b)
+		sys.b = sys.dec(sys.b)
 		return 4/4
 	case 0x06:		// LD B,d8
-		cpu.b = cpu.fetchByte()
+		sys.b = sys.fetchByte()
 		return 8/4
 	case 0x07:		// RLCA
-		cpu.a = cpu.rlc(cpu.a)
+		sys.a = sys.rlc(sys.a)
 		return 4/4
 	case 0x08:		// LD (a16),SP
-		cpu.WriteWord(cpu.fetchWord(), cpu.sp)
+		sys.writeWord(sys.fetchWord(), sys.sp)
 		return 20/4
 	case 0x09:		// ADD HL,BC
-		cpu.hl = cpu.add16(cpu.hl, cpu.bc())
+		sys.hl = sys.add16(sys.hl, sys.bc())
 		return 8/4
 	case 0x0A:		// LD A,(BC)
-		cpu.a = cpu.ReadByte(cpu.bc())
+		sys.a = sys.readByte(sys.bc())
 		return 8/4
 	case 0x0B:		// DEC BC
-		cpu.wbc(cpu.bc() - 1)
+		sys.wbc(sys.bc() - 1)
 		return 8/4
 	case 0x0C:		// INC C
-		cpu.c = cpu.inc(cpu.c)
+		sys.c = sys.inc(sys.c)
 		return 4/4
 	case 0x0D:		// DEC C
-		cpu.c = cpu.dec(cpu.c)
+		sys.c = sys.dec(sys.c)
 		return 4/4
 	case 0x0E:		// LD C,d8
-		cpu.c = cpu.fetchByte()
+		sys.c = sys.fetchByte()
 		return 8/4
 	case 0x0F:		// RRCA
-		cpu.a = cpu.rrc(cpu.a)
+		sys.a = sys.rrc(sys.a)
 		return 4/4
 
 	case 0x10:		// STOP
-		cpu.pause = true
+		sys.pause = true
 		return 4/4
 	case 0x11:		// LD DE,d16
-		cpu.wde(cpu.fetchWord())
+		sys.wde(sys.fetchWord())
 		return 12/4
 	case 0x12:		// LD (DE),A
-		cpu.WriteByte(cpu.de(), cpu.a)
+		sys.writeByte(sys.de(), sys.a)
 		return 8/4
 	case 0x13:		// INC DE
-		cpu.wde(cpu.de() + 1)
+		sys.wde(sys.de() + 1)
 		return 8/4
 	case 0x14:		// INC D
-		cpu.d = cpu.inc(cpu.d)
+		sys.d = sys.inc(sys.d)
 		return 4/4
 	case 0x15:		// DEC D
-		cpu.d = cpu.dec(cpu.d)
+		sys.d = sys.dec(sys.d)
 		return 4/4
 	case 0x16:		// LD D,d8
-		cpu.d = cpu.fetchByte()
+		sys.d = sys.fetchByte()
 		return 8/4
 	case 0x17:		// RLA
-		cpu.a = cpu.rl(cpu.a)
+		sys.a = sys.rl(sys.a)
 		return 4/4
 	case 0x18:		// JR r8
-		return cpu.jr(true)
+		return sys.jr(true)
 	case 0x19:		// ADD HL,DE
-		cpu.hl = cpu.add16(cpu.hl, cpu.de())
+		sys.hl = sys.add16(sys.hl, sys.de())
 		return 8/4
 	case 0x1A:		// LD A,(DE)
-		cpu.a = cpu.ReadByte(cpu.de())
+		sys.a = sys.readByte(sys.de())
 		return 8/4
 	case 0x1B:		// DEC DE
-		cpu.wde(cpu.de() - 1)
+		sys.wde(sys.de() - 1)
 		return 8/4
 	case 0x1C:		// INC E
-		cpu.e = cpu.inc(cpu.e)
+		sys.e = sys.inc(sys.e)
 		return 4/4
 	case 0x1D:		// DEC E
-		cpu.e = cpu.dec(cpu.e)
+		sys.e = sys.dec(sys.e)
 		return 4/4
 	case 0x1E:		// LD E,d8
-		cpu.e = cpu.fetchByte()
+		sys.e = sys.fetchByte()
 		return 8/4
 	case 0x1F:		// RRA
-		cpu.a = cpu.rr(cpu.a)
+		sys.a = sys.rr(sys.a)
 		return 4/4
 
 	case 0x20:		// JR NZ,r8
-		return cpu.jr(!cpu.fz)
+		return sys.jr(!sys.fz)
 	case 0x21:		// LD HL,d16
-		cpu.hl = cpu.fetchWord()
+		sys.hl = sys.fetchWord()
 		return 12/4
 	case 0x22:		// LD (HL+),A
-		cpu.WriteByte(cpu.hl, cpu.a)
-		cpu.hl++
+		sys.writeByte(sys.hl, sys.a)
+		sys.hl++
 		return 8/4
 	case 0x23:		// INC HL
-		cpu.hl++
+		sys.hl++
 		return 8/4
 	case 0x24:		// INC H
-		cpu.wh(cpu.inc(cpu.h()))
+		sys.wh(sys.inc(sys.h()))
 		return 4/4
 	case 0x25:		// DEC H
-		cpu.wh(cpu.dec(cpu.h()))
+		sys.wh(sys.dec(sys.h()))
 		return 4/4
 	case 0x26:		// LD H,d8
-		cpu.wh(cpu.fetchByte())
+		sys.wh(sys.fetchByte())
 		return 8/4
 	case 0x27:		// DAA
-		if cpu.fn {
-			cpu.das()
+		if sys.fn {
+			sys.das()
 		} else {
-			cpu.daa()
+			sys.daa()
 		}
 		return 4/4
 	case 0x28:		// JR Z,r8
-		return cpu.jr(cpu.fz)
+		return sys.jr(sys.fz)
 	case 0x29:		// ADD HL,HL
-		cpu.hl = cpu.add16(cpu.hl, cpu.hl)
+		sys.hl = sys.add16(sys.hl, sys.hl)
 		return 8/4
 	case 0x2A:		// LD A,(HL+)
-		cpu.a = cpu.ReadByte(cpu.hl)
-		cpu.hl++
+		sys.a = sys.readByte(sys.hl)
+		sys.hl++
 		return 8/4
 	case 0x2B:		// DEC HL
-		cpu.hl--
+		sys.hl--
 		return 8/4
 	case 0x2C:		// INC L
-		cpu.wl(cpu.inc(cpu.l()))
+		sys.wl(sys.inc(sys.l()))
 		return 4/4
 	case 0x2D:		// DEC L
-		cpu.wl(cpu.dec(cpu.l()))
+		sys.wl(sys.dec(sys.l()))
 		return 4/4
 	case 0x2E:		// LD L,d8
-		cpu.wl(cpu.fetchByte())
+		sys.wl(sys.fetchByte())
 		return 8/4
 	case 0x2F:		// CPL
-		cpu.a ^= 0xFF
-		cpu.fn = true
-		cpu.fh = true
+		sys.a ^= 0xFF
+		sys.fn = true
+		sys.fh = true
 		return 4/4
 
 	case 0x30:		// JR NC,r8
-		return cpu.jr(!cpu.fc)
+		return sys.jr(!sys.fc)
 	case 0x31:		// LD SP,d16
-		cpu.sp = cpu.fetchWord()
-		cpu.stack = cpu.sp
+		sys.sp = sys.fetchWord()
+		sys.stack = sys.sp
 		return 12/4
 	case 0x32:		// LD (HL-),A
-		cpu.WriteByte(cpu.hl, cpu.a)
-		cpu.hl--
+		sys.writeByte(sys.hl, sys.a)
+		sys.hl--
 		return 8/4
 	case 0x33:		// INC SP
-		cpu.sp++
+		sys.sp++
 		return 8/4
 	case 0x34:		// INC (HL)
-		x := cpu.ReadByte(cpu.hl)
-		cpu.WriteByte(cpu.hl, cpu.inc(x))
+		x := sys.readByte(sys.hl)
+		sys.writeByte(sys.hl, sys.inc(x))
 		return 12/4
 	case 0x35:		// DEC (HL)
-		x := cpu.ReadByte(cpu.hl)
-		cpu.WriteByte(cpu.hl, cpu.dec(x))
+		x := sys.readByte(sys.hl)
+		sys.writeByte(sys.hl, sys.dec(x))
 		return 12/4
 	case 0x36:		// LD (HL),d8
-		cpu.WriteByte(cpu.hl, cpu.fetchByte())
+		sys.writeByte(sys.hl, sys.fetchByte())
 		return 12/4
 	case 0x37:		// SCF
-		cpu.fn = false
-		cpu.fh = false
-		cpu.fc = true
+		sys.fn = false
+		sys.fh = false
+		sys.fc = true
 		return 4/4
 	case 0x38:		// JR C,r8
-		return cpu.jr(cpu.fc)
+		return sys.jr(sys.fc)
 	case 0x39:		// ADD HL,SP
-		cpu.hl = cpu.add16(cpu.hl, cpu.sp)
+		sys.hl = sys.add16(sys.hl, sys.sp)
 		return 8/4
 	case 0x3A:		// LD A,(HL-)
-		cpu.a = cpu.ReadByte(cpu.hl)
-		cpu.hl--
+		sys.a = sys.readByte(sys.hl)
+		sys.hl--
 		return 8/4
 	case 0x3B:		// DEC SP
-		cpu.sp--
+		sys.sp--
 		return 8/4
 	case 0x3C:		// INC A
-		cpu.a = cpu.inc(cpu.a)
+		sys.a = sys.inc(sys.a)
 		return 4/4
 	case 0x3D:		// DEC A
-		cpu.a = cpu.dec(cpu.a)
+		sys.a = sys.dec(sys.a)
 		return 4/4
 	case 0x3E:		// LD A,d8
-		cpu.a = cpu.fetchByte()
+		sys.a = sys.fetchByte()
 		return 8/4
 	case 0x3F:		// CCF
-		cpu.fn = false
-		cpu.fh = false
-		cpu.fc = !cpu.fc
+		sys.fn = false
+		sys.fh = false
+		sys.fc = !sys.fc
 		return 4/4
 
 	// LD Instructions ///////////////////////////////////////////
 
 	case 0x40: return 1
-	case 0x41: cpu.b = cpu.c; return 1
-	case 0x42: cpu.b = cpu.d; return 1
-	case 0x43: cpu.b = cpu.e; return 1
-	case 0x44: cpu.b = cpu.h(); return 1
-	case 0x45: cpu.b = cpu.l(); return 1
-	case 0x46: cpu.b = cpu.ReadByte(cpu.hl); return 2
-	case 0x47: cpu.b = cpu.a; return 1
+	case 0x41: sys.b = sys.c; return 1
+	case 0x42: sys.b = sys.d; return 1
+	case 0x43: sys.b = sys.e; return 1
+	case 0x44: sys.b = sys.h(); return 1
+	case 0x45: sys.b = sys.l(); return 1
+	case 0x46: sys.b = sys.readByte(sys.hl); return 2
+	case 0x47: sys.b = sys.a; return 1
 
-	case 0x48: cpu.c = cpu.b; return 1
+	case 0x48: sys.c = sys.b; return 1
 	case 0x49: return 1
-	case 0x4A: cpu.c = cpu.d; return 1
-	case 0x4B: cpu.c = cpu.e; return 1
-	case 0x4C: cpu.c = cpu.h(); return 1
-	case 0x4D: cpu.c = cpu.l(); return 1
-	case 0x4E: cpu.c = cpu.ReadByte(cpu.hl); return 2
-	case 0x4F: cpu.c = cpu.a; return 1
+	case 0x4A: sys.c = sys.d; return 1
+	case 0x4B: sys.c = sys.e; return 1
+	case 0x4C: sys.c = sys.h(); return 1
+	case 0x4D: sys.c = sys.l(); return 1
+	case 0x4E: sys.c = sys.readByte(sys.hl); return 2
+	case 0x4F: sys.c = sys.a; return 1
 
-	case 0x50: cpu.d = cpu.b; return 1
-	case 0x51: cpu.d = cpu.c; return 1
+	case 0x50: sys.d = sys.b; return 1
+	case 0x51: sys.d = sys.c; return 1
 	case 0x52: return 1
-	case 0x53: cpu.d = cpu.e; return 1
-	case 0x54: cpu.d = cpu.h(); return 1
-	case 0x55: cpu.d = cpu.l(); return 1
-	case 0x56: cpu.d = cpu.ReadByte(cpu.hl); return 2
-	case 0x57: cpu.d = cpu.a; return 1
+	case 0x53: sys.d = sys.e; return 1
+	case 0x54: sys.d = sys.h(); return 1
+	case 0x55: sys.d = sys.l(); return 1
+	case 0x56: sys.d = sys.readByte(sys.hl); return 2
+	case 0x57: sys.d = sys.a; return 1
 
-	case 0x58: cpu.e = cpu.b; return 1
-	case 0x59: cpu.e = cpu.c; return 1
-	case 0x5A: cpu.e = cpu.d; return 1
+	case 0x58: sys.e = sys.b; return 1
+	case 0x59: sys.e = sys.c; return 1
+	case 0x5A: sys.e = sys.d; return 1
 	case 0x5B: return 1
-	case 0x5C: cpu.e = cpu.h(); return 1
-	case 0x5D: cpu.e = cpu.l(); return 1
-	case 0x5E: cpu.e = cpu.ReadByte(cpu.hl); return 2
-	case 0x5F: cpu.e = cpu.a; return 1
+	case 0x5C: sys.e = sys.h(); return 1
+	case 0x5D: sys.e = sys.l(); return 1
+	case 0x5E: sys.e = sys.readByte(sys.hl); return 2
+	case 0x5F: sys.e = sys.a; return 1
 
-	case 0x60: cpu.wh(cpu.b); return 1
-	case 0x61: cpu.wh(cpu.c); return 1
-	case 0x62: cpu.wh(cpu.d); return 1
-	case 0x63: cpu.wh(cpu.e); return 1
+	case 0x60: sys.wh(sys.b); return 1
+	case 0x61: sys.wh(sys.c); return 1
+	case 0x62: sys.wh(sys.d); return 1
+	case 0x63: sys.wh(sys.e); return 1
 	case 0x64: return 1
-	case 0x65: cpu.wh(cpu.l()); return 1
-	case 0x66: cpu.wh(cpu.ReadByte(cpu.hl)); return 2
-	case 0x67: cpu.wh(cpu.a); return 1
+	case 0x65: sys.wh(sys.l()); return 1
+	case 0x66: sys.wh(sys.readByte(sys.hl)); return 2
+	case 0x67: sys.wh(sys.a); return 1
 
-	case 0x68: cpu.wl(cpu.b); return 1
-	case 0x69: cpu.wl(cpu.c); return 1
-	case 0x6A: cpu.wl(cpu.d); return 1
-	case 0x6B: cpu.wl(cpu.e); return 1
-	case 0x6C: cpu.wl(cpu.h()); return 1
+	case 0x68: sys.wl(sys.b); return 1
+	case 0x69: sys.wl(sys.c); return 1
+	case 0x6A: sys.wl(sys.d); return 1
+	case 0x6B: sys.wl(sys.e); return 1
+	case 0x6C: sys.wl(sys.h()); return 1
 	case 0x6D: return 1
-	case 0x6E: cpu.wl(cpu.ReadByte(cpu.hl)); return 2
-	case 0x6F: cpu.wl(cpu.a); return 1
+	case 0x6E: sys.wl(sys.readByte(sys.hl)); return 2
+	case 0x6F: sys.wl(sys.a); return 1
 
-	case 0x70: cpu.WriteByte(cpu.hl, cpu.b); return 2
-	case 0x71: cpu.WriteByte(cpu.hl, cpu.c); return 2
-	case 0x72: cpu.WriteByte(cpu.hl, cpu.d); return 2
-	case 0x73: cpu.WriteByte(cpu.hl, cpu.e); return 2
-	case 0x74: cpu.WriteByte(cpu.hl, cpu.h()); return 2
-	case 0x75: cpu.WriteByte(cpu.hl, cpu.l()); return 2
-	case 0x76: cpu.halt = true; return 1
-	case 0x77: cpu.WriteByte(cpu.hl, cpu.a); return 2
+	case 0x70: sys.writeByte(sys.hl, sys.b); return 2
+	case 0x71: sys.writeByte(sys.hl, sys.c); return 2
+	case 0x72: sys.writeByte(sys.hl, sys.d); return 2
+	case 0x73: sys.writeByte(sys.hl, sys.e); return 2
+	case 0x74: sys.writeByte(sys.hl, sys.h()); return 2
+	case 0x75: sys.writeByte(sys.hl, sys.l()); return 2
+	case 0x76: sys.halt = true; return 1
+	case 0x77: sys.writeByte(sys.hl, sys.a); return 2
 
-	case 0x78: cpu.a = cpu.b; return 1
-	case 0x79: cpu.a = cpu.c; return 1
-	case 0x7A: cpu.a = cpu.d; return 1
-	case 0x7B: cpu.a = cpu.e; return 1
-	case 0x7C: cpu.a = cpu.h(); return 1
-	case 0x7D: cpu.a = cpu.l(); return 1
-	case 0x7E: cpu.a = cpu.ReadByte(cpu.hl); return 2
+	case 0x78: sys.a = sys.b; return 1
+	case 0x79: sys.a = sys.c; return 1
+	case 0x7A: sys.a = sys.d; return 1
+	case 0x7B: sys.a = sys.e; return 1
+	case 0x7C: sys.a = sys.h(); return 1
+	case 0x7D: sys.a = sys.l(); return 1
+	case 0x7E: sys.a = sys.readByte(sys.hl); return 2
 	case 0x7F: return 1
 
 	// Math Instructions /////////////////////////////////////////
 
-	case 0x80: cpu.add(cpu.b); return 1
-	case 0x81: cpu.add(cpu.c); return 1
-	case 0x82: cpu.add(cpu.d); return 1
-	case 0x83: cpu.add(cpu.e); return 1
-	case 0x84: cpu.add(cpu.h()); return 1
-	case 0x85: cpu.add(cpu.l()); return 1
-	case 0x86: cpu.add(cpu.ReadByte(cpu.hl)); return 2
-	case 0x87: cpu.add(cpu.a); return 1
+	case 0x80: sys.add(sys.b); return 1
+	case 0x81: sys.add(sys.c); return 1
+	case 0x82: sys.add(sys.d); return 1
+	case 0x83: sys.add(sys.e); return 1
+	case 0x84: sys.add(sys.h()); return 1
+	case 0x85: sys.add(sys.l()); return 1
+	case 0x86: sys.add(sys.readByte(sys.hl)); return 2
+	case 0x87: sys.add(sys.a); return 1
 
-	case 0x88: cpu.adc(cpu.b); return 1
-	case 0x89: cpu.adc(cpu.c); return 1
-	case 0x8A: cpu.adc(cpu.d); return 1
-	case 0x8B: cpu.adc(cpu.e); return 1
-	case 0x8C: cpu.adc(cpu.h()); return 1
-	case 0x8D: cpu.adc(cpu.l()); return 1
-	case 0x8E: cpu.adc(cpu.ReadByte(cpu.hl)); return 2
-	case 0x8F: cpu.adc(cpu.a); return 1
+	case 0x88: sys.adc(sys.b); return 1
+	case 0x89: sys.adc(sys.c); return 1
+	case 0x8A: sys.adc(sys.d); return 1
+	case 0x8B: sys.adc(sys.e); return 1
+	case 0x8C: sys.adc(sys.h()); return 1
+	case 0x8D: sys.adc(sys.l()); return 1
+	case 0x8E: sys.adc(sys.readByte(sys.hl)); return 2
+	case 0x8F: sys.adc(sys.a); return 1
 
-	case 0x90: cpu.sub(cpu.b); return 1
-	case 0x91: cpu.sub(cpu.c); return 1
-	case 0x92: cpu.sub(cpu.d); return 1
-	case 0x93: cpu.sub(cpu.e); return 1
-	case 0x94: cpu.sub(cpu.h()); return 1
-	case 0x95: cpu.sub(cpu.l()); return 1
-	case 0x96: cpu.sub(cpu.ReadByte(cpu.hl)); return 2
-	case 0x97: cpu.sub(cpu.a); return 1
+	case 0x90: sys.sub(sys.b); return 1
+	case 0x91: sys.sub(sys.c); return 1
+	case 0x92: sys.sub(sys.d); return 1
+	case 0x93: sys.sub(sys.e); return 1
+	case 0x94: sys.sub(sys.h()); return 1
+	case 0x95: sys.sub(sys.l()); return 1
+	case 0x96: sys.sub(sys.readByte(sys.hl)); return 2
+	case 0x97: sys.sub(sys.a); return 1
 
-	case 0x98: cpu.sbc(cpu.b); return 1
-	case 0x99: cpu.sbc(cpu.c); return 1
-	case 0x9A: cpu.sbc(cpu.d); return 1
-	case 0x9B: cpu.sbc(cpu.e); return 1
-	case 0x9C: cpu.sbc(cpu.h()); return 1
-	case 0x9D: cpu.sbc(cpu.l()); return 1
-	case 0x9E: cpu.sbc(cpu.ReadByte(cpu.hl)); return 2
-	case 0x9F: cpu.sbc(cpu.a); return 1
+	case 0x98: sys.sbc(sys.b); return 1
+	case 0x99: sys.sbc(sys.c); return 1
+	case 0x9A: sys.sbc(sys.d); return 1
+	case 0x9B: sys.sbc(sys.e); return 1
+	case 0x9C: sys.sbc(sys.h()); return 1
+	case 0x9D: sys.sbc(sys.l()); return 1
+	case 0x9E: sys.sbc(sys.readByte(sys.hl)); return 2
+	case 0x9F: sys.sbc(sys.a); return 1
 
-	case 0xA0: cpu.and(cpu.b); return 1
-	case 0xA1: cpu.and(cpu.c); return 1
-	case 0xA2: cpu.and(cpu.d); return 1
-	case 0xA3: cpu.and(cpu.e); return 1
-	case 0xA4: cpu.and(cpu.h()); return 1
-	case 0xA5: cpu.and(cpu.l()); return 1
-	case 0xA6: cpu.and(cpu.ReadByte(cpu.hl)); return 2
-	case 0xA7: cpu.and(cpu.a); return 1
+	case 0xA0: sys.and(sys.b); return 1
+	case 0xA1: sys.and(sys.c); return 1
+	case 0xA2: sys.and(sys.d); return 1
+	case 0xA3: sys.and(sys.e); return 1
+	case 0xA4: sys.and(sys.h()); return 1
+	case 0xA5: sys.and(sys.l()); return 1
+	case 0xA6: sys.and(sys.readByte(sys.hl)); return 2
+	case 0xA7: sys.and(sys.a); return 1
 
-	case 0xA8: cpu.xor(cpu.b); return 1
-	case 0xA9: cpu.xor(cpu.c); return 1
-	case 0xAA: cpu.xor(cpu.d); return 1
-	case 0xAB: cpu.xor(cpu.e); return 1
-	case 0xAC: cpu.xor(cpu.h()); return 1
-	case 0xAD: cpu.xor(cpu.l()); return 1
-	case 0xAE: cpu.xor(cpu.ReadByte(cpu.hl)); return 2
-	case 0xAF: cpu.xor(cpu.a); return 1
+	case 0xA8: sys.xor(sys.b); return 1
+	case 0xA9: sys.xor(sys.c); return 1
+	case 0xAA: sys.xor(sys.d); return 1
+	case 0xAB: sys.xor(sys.e); return 1
+	case 0xAC: sys.xor(sys.h()); return 1
+	case 0xAD: sys.xor(sys.l()); return 1
+	case 0xAE: sys.xor(sys.readByte(sys.hl)); return 2
+	case 0xAF: sys.xor(sys.a); return 1
 
-	case 0xB0: cpu.or(cpu.b); return 1
-	case 0xB1: cpu.or(cpu.c); return 1
-	case 0xB2: cpu.or(cpu.d); return 1
-	case 0xB3: cpu.or(cpu.e); return 1
-	case 0xB4: cpu.or(cpu.h()); return 1
-	case 0xB5: cpu.or(cpu.l()); return 1
-	case 0xB6: cpu.or(cpu.ReadByte(cpu.hl)); return 2
-	case 0xB7: cpu.or(cpu.a); return 1
+	case 0xB0: sys.or(sys.b); return 1
+	case 0xB1: sys.or(sys.c); return 1
+	case 0xB2: sys.or(sys.d); return 1
+	case 0xB3: sys.or(sys.e); return 1
+	case 0xB4: sys.or(sys.h()); return 1
+	case 0xB5: sys.or(sys.l()); return 1
+	case 0xB6: sys.or(sys.readByte(sys.hl)); return 2
+	case 0xB7: sys.or(sys.a); return 1
 
-	case 0xB8: cpu.cp(cpu.b); return 1
-	case 0xB9: cpu.cp(cpu.c); return 1
-	case 0xBA: cpu.cp(cpu.d); return 1
-	case 0xBB: cpu.cp(cpu.e); return 1
-	case 0xBC: cpu.cp(cpu.h()); return 1
-	case 0xBD: cpu.cp(cpu.l()); return 1
-	case 0xBE: cpu.cp(cpu.ReadByte(cpu.hl)); return 2
-	case 0xBF: cpu.cp(cpu.a); return 1
+	case 0xB8: sys.cp(sys.b); return 1
+	case 0xB9: sys.cp(sys.c); return 1
+	case 0xBA: sys.cp(sys.d); return 1
+	case 0xBB: sys.cp(sys.e); return 1
+	case 0xBC: sys.cp(sys.h()); return 1
+	case 0xBD: sys.cp(sys.l()); return 1
+	case 0xBE: sys.cp(sys.readByte(sys.hl)); return 2
+	case 0xBF: sys.cp(sys.a); return 1
 
 	// Misc Instructions /////////////////////////////////////////
 
 	case 0xC0: 		// RET NZ
-		return cpu.ret(!cpu.fz)
+		return sys.ret(!sys.fz)
 	case 0xC1:		// POP BC
-		cpu.wbc(cpu.pop())
+		sys.wbc(sys.pop())
 		return 12/4
 	case 0xC2:		// JP NZ,a16
-		return cpu.jp(!cpu.fz)
+		return sys.jp(!sys.fz)
 	case 0xC3:		// JP a16
-		return cpu.jp(true)
+		return sys.jp(true)
 	case 0xC4:		// CALL NZ,a16
-		return cpu.call(!cpu.fz)
+		return sys.call(!sys.fz)
 	case 0xC5:		// PUSH BC
-		cpu.push(cpu.bc())
+		sys.push(sys.bc())
 		return 16/4
 	case 0xC6:		// ADD A,d8
-		cpu.add(cpu.fetchByte())
+		sys.add(sys.fetchByte())
 		return 8/4
 	case 0xC7:		// RST 00H
-		return cpu.rst(0x00)
+		return sys.rst(0x00)
 	case 0xC8:		// RET Z
-		return cpu.ret(cpu.fz)
+		return sys.ret(sys.fz)
 	case 0xC9:		// RET
-		cpu.pc = cpu.pop()
+		sys.pc = sys.pop()
 		return 16/4
 	case 0xCA:		// JP Z,a16
-		return cpu.jp(cpu.fz)
+		return sys.jp(sys.fz)
 	case 0xCB:		// ** PREFIX CB **
-		return cpu.fdxCB()
+		return sys.fdxCB()
 	case 0xCC:		// CALL Z,a16
-		return cpu.call(cpu.fz)
+		return sys.call(sys.fz)
 	case 0xCD:		// CALL a16
-		return cpu.call(true)
+		return sys.call(true)
 	case 0xCE:		// ADC A,d8
-		cpu.adc(cpu.fetchByte())
+		sys.adc(sys.fetchByte())
 		return 8/4
 	case 0xCF:		// RST 08H
-		return cpu.rst(0x08)
+		return sys.rst(0x08)
 
 	case 0xD0:		// RET NC
-		return cpu.ret(!cpu.fc)
+		return sys.ret(!sys.fc)
 	case 0xD1:		// POP DE
-		cpu.wde(cpu.pop())
+		sys.wde(sys.pop())
 		return 12/4
 	case 0xD2:		// JP NC,a16
-		return cpu.jp(!cpu.fc)
-	case 0xD3: panic("cpu: invalid opcode 0xD3")
+		return sys.jp(!sys.fc)
+	case 0xD3: panic("sys: invalid opcode 0xD3")
 	case 0xD4: 		// CALL NC,a16
-		return cpu.call(!cpu.fc)
+		return sys.call(!sys.fc)
 	case 0xD5:		// PUSH DE
-		cpu.push(cpu.de())
+		sys.push(sys.de())
 		return 16/4
 	case 0xD6:		// SUB d8
-		cpu.sub(cpu.fetchByte())
+		sys.sub(sys.fetchByte())
 		return 8/4
 	case 0xD7:		// RST 10H
-		return cpu.rst(0x10)
+		return sys.rst(0x10)
 	case 0xD8:		// RET C
-		return cpu.ret(cpu.fc)
+		return sys.ret(sys.fc)
 	case 0xD9:		// RETI
-		cpu.ime = true
-		cpu.pc = cpu.pop()
+		sys.ime = true
+		sys.pc = sys.pop()
 		return 16/4
 	case 0xDA:		// JP C,a16
-		return cpu.jp(cpu.fc)
-	case 0xDB: panic("cpu: invalid opcode 0xDB")
+		return sys.jp(sys.fc)
+	case 0xDB: panic("sys: invalid opcode 0xDB")
 	case 0xDC:		// CALL C,a16
-		return cpu.call(cpu.fc)
-	case 0xDD: panic("cpu: invalid opcode 0xDD")
+		return sys.call(sys.fc)
+	case 0xDD: panic("sys: invalid opcode 0xDD")
 	case 0xDE:		// SBC d8
-		cpu.sbc(cpu.fetchByte())
+		sys.sbc(sys.fetchByte())
 		return 8/4
 	case 0xDF:		// RST 18H
-		return cpu.rst(0x18)
+		return sys.rst(0x18)
 
 	case 0xE0:		// LDH (a8),A
-		addr := 0xFF00 + uint16(cpu.fetchByte())
-		cpu.WritePort(addr, cpu.a)
+		addr := 0xFF00 + uint16(sys.fetchByte())
+		sys.writePort(addr, sys.a)
 		return 12/4
 	case 0xE1:		// POP HL
-		cpu.hl = cpu.pop()
+		sys.hl = sys.pop()
 		return 12/4
 	case 0xE2:		// LD (C),A
-		addr := 0xFF00 + uint16(cpu.c)
-		cpu.WritePort(addr, cpu.a)
+		addr := 0xFF00 + uint16(sys.c)
+		sys.writePort(addr, sys.a)
 		return 8/4
-	case 0xE3: panic("cpu: invalid opcode 0xE3")
-	case 0xE4: panic("cpu: invalid opcode 0xE4")
+	case 0xE3: panic("sys: invalid opcode 0xE3")
+	case 0xE4: panic("sys: invalid opcode 0xE4")
 	case 0xE5:		// PUSH HL
-		cpu.push(cpu.hl)
+		sys.push(sys.hl)
 		return 16/4
 	case 0xE6:		// AND d8
-		cpu.and(cpu.fetchByte())
+		sys.and(sys.fetchByte())
 		return 8/4
 	case 0xE7:		// RST 20H
-		return cpu.rst(0x20)
+		return sys.rst(0x20)
 	case 0xE8:		// ADD SP,r8
-		x := cpu.fetchByte()
-		cpu.sp = cpu.add16(cpu.sp, uint16(int8(x)))
+		x := sys.fetchByte()
+		sys.sp = sys.add16(sys.sp, uint16(int8(x)))
 		return 16/4
 	case 0xE9:		// JP (HL)
-		cpu.pc = cpu.hl
+		sys.pc = sys.hl
 		return 4/4
 	case 0xEA:		// LD (a16),A
-		cpu.WriteByte(cpu.fetchWord(), cpu.a)
+		sys.writeByte(sys.fetchWord(), sys.a)
 		return 16/4
-	case 0xEB: panic("cpu: invalid opcode 0xEB")
-	case 0xEC: panic("cpu: invalid opcode 0xEC")
-	case 0xED: panic("cpu: invalid opcode 0xED")
+	case 0xEB: panic("sys: invalid opcode 0xEB")
+	case 0xEC: panic("sys: invalid opcode 0xEC")
+	case 0xED: panic("sys: invalid opcode 0xED")
 	case 0xEE:		// XOR d8
-		cpu.xor(cpu.fetchByte())
+		sys.xor(sys.fetchByte())
 		return 8/4
 	case 0xEF: 		// RST 28H
-		return cpu.rst(0x28)
+		return sys.rst(0x28)
 
 	case 0xF0:		// LDH A,(a8)
-		addr := 0xFF00 + uint16(cpu.fetchByte())
-		cpu.a = cpu.ReadPort(addr)
+		addr := 0xFF00 + uint16(sys.fetchByte())
+		sys.a = sys.readPort(addr)
 		return 12/4
 	case 0xF1:		// POP AF
-		cpu.waf(cpu.pop())
+		sys.waf(sys.pop())
 		return 12/4
 	case 0xF2:		// LD A,(C)
-		addr := 0xFF00 + uint16(cpu.c)
-		cpu.a = cpu.ReadPort(addr)
+		addr := 0xFF00 + uint16(sys.c)
+		sys.a = sys.readPort(addr)
 		return 8/4
 	case 0xF3:		// DI
-		cpu.ime = false
+		sys.ime = false
 		return 4/4
-	case 0xF4: panic("cpu: invalid opcode 0xF4")
+	case 0xF4: panic("sys: invalid opcode 0xF4")
 	case 0xF5:		// PUSH AF
-		cpu.push(cpu.af())
+		sys.push(sys.af())
 		return 16/4
 	case 0xF6:		// OR d8
-		cpu.or(cpu.fetchByte())
+		sys.or(sys.fetchByte())
 		return 8/4
 	case 0xF7:		// RST 30H
-		return cpu.rst(0x30)
+		return sys.rst(0x30)
 	case 0xF8:		// LD HL,SP+r8
-		x := cpu.fetchByte()
-		cpu.hl = cpu.add16(cpu.sp, uint16(int8(x)))
+		x := sys.fetchByte()
+		sys.hl = sys.add16(sys.sp, uint16(int8(x)))
 		return 12/4
 	case 0xF9:		// LD SP,HL
-		cpu.sp = cpu.hl
+		sys.sp = sys.hl
 		return 8/4
 	case 0xFA:		// LD A,(a16)
-		cpu.a = cpu.ReadByte(cpu.fetchWord())
+		sys.a = sys.readByte(sys.fetchWord())
 		return 16/4
 	case 0xFB:		// EI
-		cpu.ime = true
+		sys.ime = true
 		return 4/4
-	case 0xFC: panic("cpu: invalid opcode 0xFC")
-	case 0xFD: panic("cpu: invalid opcode 0xFD")
+	case 0xFC: panic("sys: invalid opcode 0xFC")
+	case 0xFD: panic("sys: invalid opcode 0xFD")
 	case 0xFE: 		// CP d8
-		cpu.cp(cpu.fetchByte())
+		sys.cp(sys.fetchByte())
 		return 8/4
 	case 0xFF:		// RST 38H
-		return cpu.rst(0x38)
+		return sys.rst(0x38)
 	}
-	panic("unreachable in cpu.Interpret")
+	panic("unreachable in sys.Interpret")
 }
 
-func (cpu *CPU) fdxCB() int {
-	switch cpu.fetchByte() {
-	case 0x00: cpu.b = cpu.rlc(cpu.b); return 2
-	case 0x01: cpu.c = cpu.rlc(cpu.c); return 2
-	case 0x02: cpu.d = cpu.rlc(cpu.d); return 2
-	case 0x03: cpu.e = cpu.rlc(cpu.e); return 2
-	case 0x04: cpu.wh(cpu.rlc(cpu.h())); return 2
-	case 0x05: cpu.wl(cpu.rlc(cpu.l())); return 2
-	case 0x06: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.rlc(x))
+func (sys *cpu) fdxCB() int {
+	switch sys.fetchByte() {
+	case 0x00: sys.b = sys.rlc(sys.b); return 2
+	case 0x01: sys.c = sys.rlc(sys.c); return 2
+	case 0x02: sys.d = sys.rlc(sys.d); return 2
+	case 0x03: sys.e = sys.rlc(sys.e); return 2
+	case 0x04: sys.wh(sys.rlc(sys.h())); return 2
+	case 0x05: sys.wl(sys.rlc(sys.l())); return 2
+	case 0x06: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.rlc(x))
 		   return 4
-	case 0x07: cpu.a = cpu.rlc(cpu.a); return 2
+	case 0x07: sys.a = sys.rlc(sys.a); return 2
 
-	case 0x08: cpu.b = cpu.rrc(cpu.b); return 2
-	case 0x09: cpu.c = cpu.rrc(cpu.c); return 2
-	case 0x0A: cpu.d = cpu.rrc(cpu.d); return 2
-	case 0x0B: cpu.e = cpu.rrc(cpu.e); return 2
-	case 0x0C: cpu.wh(cpu.rrc(cpu.h())); return 2
-	case 0x0D: cpu.wl(cpu.rrc(cpu.l())); return 2
-	case 0x0E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.rrc(x))
+	case 0x08: sys.b = sys.rrc(sys.b); return 2
+	case 0x09: sys.c = sys.rrc(sys.c); return 2
+	case 0x0A: sys.d = sys.rrc(sys.d); return 2
+	case 0x0B: sys.e = sys.rrc(sys.e); return 2
+	case 0x0C: sys.wh(sys.rrc(sys.h())); return 2
+	case 0x0D: sys.wl(sys.rrc(sys.l())); return 2
+	case 0x0E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.rrc(x))
 		   return 4
-	case 0x0F: cpu.a = cpu.rrc(cpu.a); return 2
+	case 0x0F: sys.a = sys.rrc(sys.a); return 2
 
-	case 0x10: cpu.b = cpu.rl(cpu.b); return 2
-	case 0x11: cpu.c = cpu.rl(cpu.c); return 2
-	case 0x12: cpu.d = cpu.rl(cpu.d); return 2
-	case 0x13: cpu.e = cpu.rl(cpu.e); return 2
-	case 0x14: cpu.wh(cpu.rl(cpu.h())); return 2
-	case 0x15: cpu.wl(cpu.rl(cpu.l())); return 2
-	case 0x16: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.rl(x))
+	case 0x10: sys.b = sys.rl(sys.b); return 2
+	case 0x11: sys.c = sys.rl(sys.c); return 2
+	case 0x12: sys.d = sys.rl(sys.d); return 2
+	case 0x13: sys.e = sys.rl(sys.e); return 2
+	case 0x14: sys.wh(sys.rl(sys.h())); return 2
+	case 0x15: sys.wl(sys.rl(sys.l())); return 2
+	case 0x16: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.rl(x))
 		   return 4
-	case 0x17: cpu.a = cpu.rl(cpu.a); return 2
+	case 0x17: sys.a = sys.rl(sys.a); return 2
 
-	case 0x18: cpu.b = cpu.rr(cpu.b); return 2
-	case 0x19: cpu.c = cpu.rr(cpu.c); return 2
-	case 0x1A: cpu.d = cpu.rr(cpu.d); return 2
-	case 0x1B: cpu.e = cpu.rr(cpu.e); return 2
-	case 0x1C: cpu.wh(cpu.rr(cpu.h())); return 2
-	case 0x1D: cpu.wl(cpu.rr(cpu.l())); return 2
-	case 0x1E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.rr(x))
+	case 0x18: sys.b = sys.rr(sys.b); return 2
+	case 0x19: sys.c = sys.rr(sys.c); return 2
+	case 0x1A: sys.d = sys.rr(sys.d); return 2
+	case 0x1B: sys.e = sys.rr(sys.e); return 2
+	case 0x1C: sys.wh(sys.rr(sys.h())); return 2
+	case 0x1D: sys.wl(sys.rr(sys.l())); return 2
+	case 0x1E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.rr(x))
 		   return 4
-	case 0x1F: cpu.a = cpu.rr(cpu.a); return 2
+	case 0x1F: sys.a = sys.rr(sys.a); return 2
 
-	case 0x20: cpu.b = cpu.sla(cpu.b); return 2
-	case 0x21: cpu.c = cpu.sla(cpu.c); return 2
-	case 0x22: cpu.d = cpu.sla(cpu.d); return 2
-	case 0x23: cpu.e = cpu.sla(cpu.e); return 2
-	case 0x24: cpu.wh(cpu.sla(cpu.h())); return 2
-	case 0x25: cpu.wl(cpu.sla(cpu.l())); return 2
-	case 0x26: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.sla(x))
+	case 0x20: sys.b = sys.sla(sys.b); return 2
+	case 0x21: sys.c = sys.sla(sys.c); return 2
+	case 0x22: sys.d = sys.sla(sys.d); return 2
+	case 0x23: sys.e = sys.sla(sys.e); return 2
+	case 0x24: sys.wh(sys.sla(sys.h())); return 2
+	case 0x25: sys.wl(sys.sla(sys.l())); return 2
+	case 0x26: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.sla(x))
 		   return 4
-	case 0x27: cpu.a = cpu.sla(cpu.a); return 2
+	case 0x27: sys.a = sys.sla(sys.a); return 2
 
-	case 0x28: cpu.b = cpu.sra(cpu.b); return 2
-	case 0x29: cpu.c = cpu.sra(cpu.c); return 2
-	case 0x2A: cpu.d = cpu.sra(cpu.d); return 2
-	case 0x2B: cpu.e = cpu.sra(cpu.e); return 2
-	case 0x2C: cpu.wh(cpu.sra(cpu.h())); return 2
-	case 0x2D: cpu.wl(cpu.sra(cpu.l())); return 2
-	case 0x2E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.sra(x))
+	case 0x28: sys.b = sys.sra(sys.b); return 2
+	case 0x29: sys.c = sys.sra(sys.c); return 2
+	case 0x2A: sys.d = sys.sra(sys.d); return 2
+	case 0x2B: sys.e = sys.sra(sys.e); return 2
+	case 0x2C: sys.wh(sys.sra(sys.h())); return 2
+	case 0x2D: sys.wl(sys.sra(sys.l())); return 2
+	case 0x2E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.sra(x))
 		   return 4
-	case 0x2F: cpu.a = cpu.sra(cpu.a); return 2
+	case 0x2F: sys.a = sys.sra(sys.a); return 2
 
-	case 0x30: cpu.b = cpu.swap(cpu.b); return 2
-	case 0x31: cpu.c = cpu.swap(cpu.c); return 2
-	case 0x32: cpu.d = cpu.swap(cpu.d); return 2
-	case 0x33: cpu.e = cpu.swap(cpu.e); return 2
-	case 0x34: cpu.wh(cpu.swap(cpu.h())); return 2
-	case 0x35: cpu.wl(cpu.swap(cpu.l())); return 2
-	case 0x36: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.swap(x))
+	case 0x30: sys.b = sys.swap(sys.b); return 2
+	case 0x31: sys.c = sys.swap(sys.c); return 2
+	case 0x32: sys.d = sys.swap(sys.d); return 2
+	case 0x33: sys.e = sys.swap(sys.e); return 2
+	case 0x34: sys.wh(sys.swap(sys.h())); return 2
+	case 0x35: sys.wl(sys.swap(sys.l())); return 2
+	case 0x36: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.swap(x))
 		   return 4
-	case 0x37: cpu.a = cpu.swap(cpu.a); return 2
+	case 0x37: sys.a = sys.swap(sys.a); return 2
 
-	case 0x38: cpu.b = cpu.srl(cpu.b); return 2
-	case 0x39: cpu.c = cpu.srl(cpu.c); return 2
-	case 0x3A: cpu.d = cpu.srl(cpu.d); return 2
-	case 0x3B: cpu.e = cpu.srl(cpu.e); return 2
-	case 0x3C: cpu.wh(cpu.srl(cpu.h())); return 2
-	case 0x3D: cpu.wl(cpu.srl(cpu.l())); return 2
-	case 0x3E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, cpu.srl(x))
+	case 0x38: sys.b = sys.srl(sys.b); return 2
+	case 0x39: sys.c = sys.srl(sys.c); return 2
+	case 0x3A: sys.d = sys.srl(sys.d); return 2
+	case 0x3B: sys.e = sys.srl(sys.e); return 2
+	case 0x3C: sys.wh(sys.srl(sys.h())); return 2
+	case 0x3D: sys.wl(sys.srl(sys.l())); return 2
+	case 0x3E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, sys.srl(x))
 		   return 4
-	case 0x3F: cpu.a = cpu.srl(cpu.a); return 2
+	case 0x3F: sys.a = sys.srl(sys.a); return 2
 
-	case 0x40: cpu.bit(0, cpu.b); return 2
-	case 0x41: cpu.bit(0, cpu.c); return 2
-	case 0x42: cpu.bit(0, cpu.d); return 2
-	case 0x43: cpu.bit(0, cpu.e); return 2
-	case 0x44: cpu.bit(0, cpu.h()); return 2
-	case 0x45: cpu.bit(0, cpu.l()); return 2
-	case 0x46: cpu.bit(0, cpu.ReadByte(cpu.hl)); return 4
-	case 0x47: cpu.bit(0, cpu.a); return 2
+	case 0x40: sys.bit(0, sys.b); return 2
+	case 0x41: sys.bit(0, sys.c); return 2
+	case 0x42: sys.bit(0, sys.d); return 2
+	case 0x43: sys.bit(0, sys.e); return 2
+	case 0x44: sys.bit(0, sys.h()); return 2
+	case 0x45: sys.bit(0, sys.l()); return 2
+	case 0x46: sys.bit(0, sys.readByte(sys.hl)); return 4
+	case 0x47: sys.bit(0, sys.a); return 2
 
-	case 0x48: cpu.bit(1, cpu.b); return 2
-	case 0x49: cpu.bit(1, cpu.c); return 2
-	case 0x4A: cpu.bit(1, cpu.d); return 2
-	case 0x4B: cpu.bit(1, cpu.e); return 2
-	case 0x4C: cpu.bit(1, cpu.h()); return 2
-	case 0x4D: cpu.bit(1, cpu.l()); return 2
-	case 0x4E: cpu.bit(1, cpu.ReadByte(cpu.hl)); return 4
-	case 0x4F: cpu.bit(1, cpu.a); return 2
+	case 0x48: sys.bit(1, sys.b); return 2
+	case 0x49: sys.bit(1, sys.c); return 2
+	case 0x4A: sys.bit(1, sys.d); return 2
+	case 0x4B: sys.bit(1, sys.e); return 2
+	case 0x4C: sys.bit(1, sys.h()); return 2
+	case 0x4D: sys.bit(1, sys.l()); return 2
+	case 0x4E: sys.bit(1, sys.readByte(sys.hl)); return 4
+	case 0x4F: sys.bit(1, sys.a); return 2
 
-	case 0x50: cpu.bit(2, cpu.b); return 2
-	case 0x51: cpu.bit(2, cpu.c); return 2
-	case 0x52: cpu.bit(2, cpu.d); return 2
-	case 0x53: cpu.bit(2, cpu.e); return 2
-	case 0x54: cpu.bit(2, cpu.h()); return 2
-	case 0x55: cpu.bit(2, cpu.l()); return 2
-	case 0x56: cpu.bit(2, cpu.ReadByte(cpu.hl)); return 4
-	case 0x57: cpu.bit(2, cpu.a); return 2
+	case 0x50: sys.bit(2, sys.b); return 2
+	case 0x51: sys.bit(2, sys.c); return 2
+	case 0x52: sys.bit(2, sys.d); return 2
+	case 0x53: sys.bit(2, sys.e); return 2
+	case 0x54: sys.bit(2, sys.h()); return 2
+	case 0x55: sys.bit(2, sys.l()); return 2
+	case 0x56: sys.bit(2, sys.readByte(sys.hl)); return 4
+	case 0x57: sys.bit(2, sys.a); return 2
 
-	case 0x58: cpu.bit(3, cpu.b); return 2
-	case 0x59: cpu.bit(3, cpu.c); return 2
-	case 0x5A: cpu.bit(3, cpu.d); return 2
-	case 0x5B: cpu.bit(3, cpu.e); return 2
-	case 0x5C: cpu.bit(3, cpu.h()); return 2
-	case 0x5D: cpu.bit(3, cpu.l()); return 2
-	case 0x5E: cpu.bit(3, cpu.ReadByte(cpu.hl)); return 4
-	case 0x5F: cpu.bit(3, cpu.a); return 2
+	case 0x58: sys.bit(3, sys.b); return 2
+	case 0x59: sys.bit(3, sys.c); return 2
+	case 0x5A: sys.bit(3, sys.d); return 2
+	case 0x5B: sys.bit(3, sys.e); return 2
+	case 0x5C: sys.bit(3, sys.h()); return 2
+	case 0x5D: sys.bit(3, sys.l()); return 2
+	case 0x5E: sys.bit(3, sys.readByte(sys.hl)); return 4
+	case 0x5F: sys.bit(3, sys.a); return 2
 
-	case 0x60: cpu.bit(4, cpu.b); return 2
-	case 0x61: cpu.bit(4, cpu.c); return 2
-	case 0x62: cpu.bit(4, cpu.d); return 2
-	case 0x63: cpu.bit(4, cpu.e); return 2
-	case 0x64: cpu.bit(4, cpu.h()); return 2
-	case 0x65: cpu.bit(4, cpu.l()); return 2
-	case 0x66: cpu.bit(4, cpu.ReadByte(cpu.hl)); return 4
-	case 0x67: cpu.bit(4, cpu.a); return 2
+	case 0x60: sys.bit(4, sys.b); return 2
+	case 0x61: sys.bit(4, sys.c); return 2
+	case 0x62: sys.bit(4, sys.d); return 2
+	case 0x63: sys.bit(4, sys.e); return 2
+	case 0x64: sys.bit(4, sys.h()); return 2
+	case 0x65: sys.bit(4, sys.l()); return 2
+	case 0x66: sys.bit(4, sys.readByte(sys.hl)); return 4
+	case 0x67: sys.bit(4, sys.a); return 2
 
-	case 0x68: cpu.bit(5, cpu.b); return 2
-	case 0x69: cpu.bit(5, cpu.c); return 2
-	case 0x6A: cpu.bit(5, cpu.d); return 2
-	case 0x6B: cpu.bit(5, cpu.e); return 2
-	case 0x6C: cpu.bit(5, cpu.h()); return 2
-	case 0x6D: cpu.bit(5, cpu.l()); return 2
-	case 0x6E: cpu.bit(5, cpu.ReadByte(cpu.hl)); return 4
-	case 0x6F: cpu.bit(5, cpu.a); return 2
+	case 0x68: sys.bit(5, sys.b); return 2
+	case 0x69: sys.bit(5, sys.c); return 2
+	case 0x6A: sys.bit(5, sys.d); return 2
+	case 0x6B: sys.bit(5, sys.e); return 2
+	case 0x6C: sys.bit(5, sys.h()); return 2
+	case 0x6D: sys.bit(5, sys.l()); return 2
+	case 0x6E: sys.bit(5, sys.readByte(sys.hl)); return 4
+	case 0x6F: sys.bit(5, sys.a); return 2
 
-	case 0x70: cpu.bit(6, cpu.b); return 2
-	case 0x71: cpu.bit(6, cpu.c); return 2
-	case 0x72: cpu.bit(6, cpu.d); return 2
-	case 0x73: cpu.bit(6, cpu.e); return 2
-	case 0x74: cpu.bit(6, cpu.h()); return 2
-	case 0x75: cpu.bit(6, cpu.l()); return 2
-	case 0x76: cpu.bit(6, cpu.ReadByte(cpu.hl)); return 4
-	case 0x77: cpu.bit(6, cpu.a); return 2
+	case 0x70: sys.bit(6, sys.b); return 2
+	case 0x71: sys.bit(6, sys.c); return 2
+	case 0x72: sys.bit(6, sys.d); return 2
+	case 0x73: sys.bit(6, sys.e); return 2
+	case 0x74: sys.bit(6, sys.h()); return 2
+	case 0x75: sys.bit(6, sys.l()); return 2
+	case 0x76: sys.bit(6, sys.readByte(sys.hl)); return 4
+	case 0x77: sys.bit(6, sys.a); return 2
 
-	case 0x78: cpu.bit(7, cpu.b); return 2
-	case 0x79: cpu.bit(7, cpu.c); return 2
-	case 0x7A: cpu.bit(7, cpu.d); return 2
-	case 0x7B: cpu.bit(7, cpu.e); return 2
-	case 0x7C: cpu.bit(7, cpu.h()); return 2
-	case 0x7D: cpu.bit(7, cpu.l()); return 2
-	case 0x7E: cpu.bit(7, cpu.ReadByte(cpu.hl)); return 4
-	case 0x7F: cpu.bit(7, cpu.a); return 2
+	case 0x78: sys.bit(7, sys.b); return 2
+	case 0x79: sys.bit(7, sys.c); return 2
+	case 0x7A: sys.bit(7, sys.d); return 2
+	case 0x7B: sys.bit(7, sys.e); return 2
+	case 0x7C: sys.bit(7, sys.h()); return 2
+	case 0x7D: sys.bit(7, sys.l()); return 2
+	case 0x7E: sys.bit(7, sys.readByte(sys.hl)); return 4
+	case 0x7F: sys.bit(7, sys.a); return 2
 
-	case 0x80: cpu.b = res(0, cpu.b); return 2
-	case 0x81: cpu.c = res(0, cpu.c); return 2
-	case 0x82: cpu.d = res(0, cpu.d); return 2
-	case 0x83: cpu.e = res(0, cpu.e); return 2
-	case 0x84: cpu.wh(res(0, cpu.h())); return 2
-	case 0x85: cpu.wl(res(0, cpu.l())); return 2
-	case 0x86: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(0, x))
+	case 0x80: sys.b = res(0, sys.b); return 2
+	case 0x81: sys.c = res(0, sys.c); return 2
+	case 0x82: sys.d = res(0, sys.d); return 2
+	case 0x83: sys.e = res(0, sys.e); return 2
+	case 0x84: sys.wh(res(0, sys.h())); return 2
+	case 0x85: sys.wl(res(0, sys.l())); return 2
+	case 0x86: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(0, x))
 		   return 4
-	case 0x87: cpu.a = res(0, cpu.a); return 2
+	case 0x87: sys.a = res(0, sys.a); return 2
 
-	case 0x88: cpu.b = res(1, cpu.b); return 2
-	case 0x89: cpu.c = res(1, cpu.c); return 2
-	case 0x8A: cpu.d = res(1, cpu.d); return 2
-	case 0x8B: cpu.e = res(1, cpu.e); return 2
-	case 0x8C: cpu.wh(res(1, cpu.h())); return 2
-	case 0x8D: cpu.wl(res(1, cpu.l())); return 2
-	case 0x8E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(1, x))
+	case 0x88: sys.b = res(1, sys.b); return 2
+	case 0x89: sys.c = res(1, sys.c); return 2
+	case 0x8A: sys.d = res(1, sys.d); return 2
+	case 0x8B: sys.e = res(1, sys.e); return 2
+	case 0x8C: sys.wh(res(1, sys.h())); return 2
+	case 0x8D: sys.wl(res(1, sys.l())); return 2
+	case 0x8E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(1, x))
 		   return 4
-	case 0x8F: cpu.a = res(1, cpu.a); return 2
+	case 0x8F: sys.a = res(1, sys.a); return 2
 
-	case 0x90: cpu.b = res(2, cpu.b); return 2
-	case 0x91: cpu.c = res(2, cpu.c); return 2
-	case 0x92: cpu.d = res(2, cpu.d); return 2
-	case 0x93: cpu.e = res(2, cpu.e); return 2
-	case 0x94: cpu.wh(res(2, cpu.h())); return 2
-	case 0x95: cpu.wl(res(2, cpu.l())); return 2
-	case 0x96: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(2, x))
+	case 0x90: sys.b = res(2, sys.b); return 2
+	case 0x91: sys.c = res(2, sys.c); return 2
+	case 0x92: sys.d = res(2, sys.d); return 2
+	case 0x93: sys.e = res(2, sys.e); return 2
+	case 0x94: sys.wh(res(2, sys.h())); return 2
+	case 0x95: sys.wl(res(2, sys.l())); return 2
+	case 0x96: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(2, x))
 		   return 4
-	case 0x97: cpu.a = res(2, cpu.a); return 2
+	case 0x97: sys.a = res(2, sys.a); return 2
 
-	case 0x98: cpu.b = res(3, cpu.b); return 2
-	case 0x99: cpu.c = res(3, cpu.c); return 2
-	case 0x9A: cpu.d = res(3, cpu.d); return 2
-	case 0x9B: cpu.e = res(3, cpu.e); return 2
-	case 0x9C: cpu.wh(res(3, cpu.h())); return 2
-	case 0x9D: cpu.wl(res(3, cpu.l())); return 2
-	case 0x9E: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(3, x))
+	case 0x98: sys.b = res(3, sys.b); return 2
+	case 0x99: sys.c = res(3, sys.c); return 2
+	case 0x9A: sys.d = res(3, sys.d); return 2
+	case 0x9B: sys.e = res(3, sys.e); return 2
+	case 0x9C: sys.wh(res(3, sys.h())); return 2
+	case 0x9D: sys.wl(res(3, sys.l())); return 2
+	case 0x9E: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(3, x))
 		   return 4
-	case 0x9F: cpu.a = res(3, cpu.a); return 2
+	case 0x9F: sys.a = res(3, sys.a); return 2
 
-	case 0xA0: cpu.b = res(4, cpu.b); return 2
-	case 0xA1: cpu.c = res(4, cpu.c); return 2
-	case 0xA2: cpu.d = res(4, cpu.d); return 2
-	case 0xA3: cpu.e = res(4, cpu.e); return 2
-	case 0xA4: cpu.wh(res(4, cpu.h())); return 2
-	case 0xA5: cpu.wl(res(4, cpu.l())); return 2
-	case 0xA6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(4, x))
+	case 0xA0: sys.b = res(4, sys.b); return 2
+	case 0xA1: sys.c = res(4, sys.c); return 2
+	case 0xA2: sys.d = res(4, sys.d); return 2
+	case 0xA3: sys.e = res(4, sys.e); return 2
+	case 0xA4: sys.wh(res(4, sys.h())); return 2
+	case 0xA5: sys.wl(res(4, sys.l())); return 2
+	case 0xA6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(4, x))
 		   return 4
-	case 0xA7: cpu.a = res(4, cpu.a); return 2
+	case 0xA7: sys.a = res(4, sys.a); return 2
 
-	case 0xA8: cpu.b = res(5, cpu.b); return 2
-	case 0xA9: cpu.c = res(5, cpu.c); return 2
-	case 0xAA: cpu.d = res(5, cpu.d); return 2
-	case 0xAB: cpu.e = res(5, cpu.e); return 2
-	case 0xAC: cpu.wh(res(5, cpu.h())); return 2
-	case 0xAD: cpu.wl(res(5, cpu.l())); return 2
-	case 0xAE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(5, x))
+	case 0xA8: sys.b = res(5, sys.b); return 2
+	case 0xA9: sys.c = res(5, sys.c); return 2
+	case 0xAA: sys.d = res(5, sys.d); return 2
+	case 0xAB: sys.e = res(5, sys.e); return 2
+	case 0xAC: sys.wh(res(5, sys.h())); return 2
+	case 0xAD: sys.wl(res(5, sys.l())); return 2
+	case 0xAE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(5, x))
 		   return 4
-	case 0xAF: cpu.a = res(5, cpu.a); return 2
+	case 0xAF: sys.a = res(5, sys.a); return 2
 
-	case 0xB0: cpu.b = res(6, cpu.b); return 2
-	case 0xB1: cpu.c = res(6, cpu.c); return 2
-	case 0xB2: cpu.d = res(6, cpu.d); return 2
-	case 0xB3: cpu.e = res(6, cpu.e); return 2
-	case 0xB4: cpu.wh(res(6, cpu.h())); return 2
-	case 0xB5: cpu.wl(res(6, cpu.l())); return 2
-	case 0xB6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(6, x))
+	case 0xB0: sys.b = res(6, sys.b); return 2
+	case 0xB1: sys.c = res(6, sys.c); return 2
+	case 0xB2: sys.d = res(6, sys.d); return 2
+	case 0xB3: sys.e = res(6, sys.e); return 2
+	case 0xB4: sys.wh(res(6, sys.h())); return 2
+	case 0xB5: sys.wl(res(6, sys.l())); return 2
+	case 0xB6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(6, x))
 		   return 4
-	case 0xB7: cpu.a = res(6, cpu.a); return 2
+	case 0xB7: sys.a = res(6, sys.a); return 2
 
-	case 0xB8: cpu.b = res(7, cpu.b); return 2
-	case 0xB9: cpu.c = res(7, cpu.c); return 2
-	case 0xBA: cpu.d = res(7, cpu.d); return 2
-	case 0xBB: cpu.e = res(7, cpu.e); return 2
-	case 0xBC: cpu.wh(res(7, cpu.h())); return 2
-	case 0xBD: cpu.wl(res(7, cpu.l())); return 2
-	case 0xBE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, res(7, x))
+	case 0xB8: sys.b = res(7, sys.b); return 2
+	case 0xB9: sys.c = res(7, sys.c); return 2
+	case 0xBA: sys.d = res(7, sys.d); return 2
+	case 0xBB: sys.e = res(7, sys.e); return 2
+	case 0xBC: sys.wh(res(7, sys.h())); return 2
+	case 0xBD: sys.wl(res(7, sys.l())); return 2
+	case 0xBE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, res(7, x))
 		   return 4
-	case 0xBF: cpu.a = res(7, cpu.a); return 2
+	case 0xBF: sys.a = res(7, sys.a); return 2
 
-	case 0xC0: cpu.b = set(0, cpu.b); return 2
-	case 0xC1: cpu.c = set(0, cpu.c); return 2
-	case 0xC2: cpu.d = set(0, cpu.d); return 2
-	case 0xC3: cpu.e = set(0, cpu.e); return 2
-	case 0xC4: cpu.wh(set(0, cpu.h())); return 2
-	case 0xC5: cpu.wl(set(0, cpu.l())); return 2
-	case 0xC6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(0, x))
+	case 0xC0: sys.b = set(0, sys.b); return 2
+	case 0xC1: sys.c = set(0, sys.c); return 2
+	case 0xC2: sys.d = set(0, sys.d); return 2
+	case 0xC3: sys.e = set(0, sys.e); return 2
+	case 0xC4: sys.wh(set(0, sys.h())); return 2
+	case 0xC5: sys.wl(set(0, sys.l())); return 2
+	case 0xC6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(0, x))
 		   return 4
-	case 0xC7: cpu.a = set(0, cpu.a); return 2
+	case 0xC7: sys.a = set(0, sys.a); return 2
 
-	case 0xC8: cpu.b = set(1, cpu.b); return 2
-	case 0xC9: cpu.c = set(1, cpu.c); return 2
-	case 0xCA: cpu.d = set(1, cpu.d); return 2
-	case 0xCB: cpu.e = set(1, cpu.e); return 2
-	case 0xCC: cpu.wh(set(1, cpu.h())); return 2
-	case 0xCD: cpu.wl(set(1, cpu.l())); return 2
-	case 0xCE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(1, x))
+	case 0xC8: sys.b = set(1, sys.b); return 2
+	case 0xC9: sys.c = set(1, sys.c); return 2
+	case 0xCA: sys.d = set(1, sys.d); return 2
+	case 0xCB: sys.e = set(1, sys.e); return 2
+	case 0xCC: sys.wh(set(1, sys.h())); return 2
+	case 0xCD: sys.wl(set(1, sys.l())); return 2
+	case 0xCE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(1, x))
 		   return 4
-	case 0xCF: cpu.a = set(1, cpu.a); return 2
+	case 0xCF: sys.a = set(1, sys.a); return 2
 
-	case 0xD0: cpu.b = set(2, cpu.b); return 2
-	case 0xD1: cpu.c = set(2, cpu.c); return 2
-	case 0xD2: cpu.d = set(2, cpu.d); return 2
-	case 0xD3: cpu.e = set(2, cpu.e); return 2
-	case 0xD4: cpu.wh(set(2, cpu.h())); return 2
-	case 0xD5: cpu.wl(set(2, cpu.l())); return 2
-	case 0xD6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(2, x))
+	case 0xD0: sys.b = set(2, sys.b); return 2
+	case 0xD1: sys.c = set(2, sys.c); return 2
+	case 0xD2: sys.d = set(2, sys.d); return 2
+	case 0xD3: sys.e = set(2, sys.e); return 2
+	case 0xD4: sys.wh(set(2, sys.h())); return 2
+	case 0xD5: sys.wl(set(2, sys.l())); return 2
+	case 0xD6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(2, x))
 		   return 4
-	case 0xD7: cpu.a = set(2, cpu.a); return 2
+	case 0xD7: sys.a = set(2, sys.a); return 2
 
-	case 0xD8: cpu.b = set(3, cpu.b); return 2
-	case 0xD9: cpu.c = set(3, cpu.c); return 2
-	case 0xDA: cpu.d = set(3, cpu.d); return 2
-	case 0xDB: cpu.e = set(3, cpu.e); return 2
-	case 0xDC: cpu.wh(set(3, cpu.h())); return 2
-	case 0xDD: cpu.wl(set(3, cpu.l())); return 2
-	case 0xDE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(3, x))
+	case 0xD8: sys.b = set(3, sys.b); return 2
+	case 0xD9: sys.c = set(3, sys.c); return 2
+	case 0xDA: sys.d = set(3, sys.d); return 2
+	case 0xDB: sys.e = set(3, sys.e); return 2
+	case 0xDC: sys.wh(set(3, sys.h())); return 2
+	case 0xDD: sys.wl(set(3, sys.l())); return 2
+	case 0xDE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(3, x))
 		   return 4
-	case 0xDF: cpu.a = set(3, cpu.a); return 2
+	case 0xDF: sys.a = set(3, sys.a); return 2
 
-	case 0xE0: cpu.b = set(4, cpu.b); return 2
-	case 0xE1: cpu.c = set(4, cpu.c); return 2
-	case 0xE2: cpu.d = set(4, cpu.d); return 2
-	case 0xE3: cpu.e = set(4, cpu.e); return 2
-	case 0xE4: cpu.wh(set(4, cpu.h())); return 2
-	case 0xE5: cpu.wl(set(4, cpu.l())); return 2
-	case 0xE6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(4, x))
+	case 0xE0: sys.b = set(4, sys.b); return 2
+	case 0xE1: sys.c = set(4, sys.c); return 2
+	case 0xE2: sys.d = set(4, sys.d); return 2
+	case 0xE3: sys.e = set(4, sys.e); return 2
+	case 0xE4: sys.wh(set(4, sys.h())); return 2
+	case 0xE5: sys.wl(set(4, sys.l())); return 2
+	case 0xE6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(4, x))
 		   return 4
-	case 0xE7: cpu.a = set(4, cpu.a); return 2
+	case 0xE7: sys.a = set(4, sys.a); return 2
 
-	case 0xE8: cpu.b = set(5, cpu.b); return 2
-	case 0xE9: cpu.c = set(5, cpu.c); return 2
-	case 0xEA: cpu.d = set(5, cpu.d); return 2
-	case 0xEB: cpu.e = set(5, cpu.e); return 2
-	case 0xEC: cpu.wh(set(5, cpu.h())); return 2
-	case 0xED: cpu.wl(set(5, cpu.l())); return 2
-	case 0xEE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(5, x))
+	case 0xE8: sys.b = set(5, sys.b); return 2
+	case 0xE9: sys.c = set(5, sys.c); return 2
+	case 0xEA: sys.d = set(5, sys.d); return 2
+	case 0xEB: sys.e = set(5, sys.e); return 2
+	case 0xEC: sys.wh(set(5, sys.h())); return 2
+	case 0xED: sys.wl(set(5, sys.l())); return 2
+	case 0xEE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(5, x))
 		   return 4
-	case 0xEF: cpu.a = set(5, cpu.a); return 2
+	case 0xEF: sys.a = set(5, sys.a); return 2
 
-	case 0xF0: cpu.b = set(6, cpu.b); return 2
-	case 0xF1: cpu.c = set(6, cpu.c); return 2
-	case 0xF2: cpu.d = set(6, cpu.d); return 2
-	case 0xF3: cpu.e = set(6, cpu.e); return 2
-	case 0xF4: cpu.wh(set(6, cpu.h())); return 2
-	case 0xF5: cpu.wl(set(6, cpu.l())); return 2
-	case 0xF6: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(6, x))
+	case 0xF0: sys.b = set(6, sys.b); return 2
+	case 0xF1: sys.c = set(6, sys.c); return 2
+	case 0xF2: sys.d = set(6, sys.d); return 2
+	case 0xF3: sys.e = set(6, sys.e); return 2
+	case 0xF4: sys.wh(set(6, sys.h())); return 2
+	case 0xF5: sys.wl(set(6, sys.l())); return 2
+	case 0xF6: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(6, x))
 		   return 4
-	case 0xF7: cpu.a = set(6, cpu.a); return 2
+	case 0xF7: sys.a = set(6, sys.a); return 2
 
-	case 0xF8: cpu.b = set(7, cpu.b); return 2
-	case 0xF9: cpu.c = set(7, cpu.c); return 2
-	case 0xFA: cpu.d = set(7, cpu.d); return 2
-	case 0xFB: cpu.e = set(7, cpu.e); return 2
-	case 0xFC: cpu.wh(set(7, cpu.h())); return 2
-	case 0xFD: cpu.wl(set(7, cpu.l())); return 2
-	case 0xFE: x := cpu.ReadByte(cpu.hl)
-		   cpu.WriteByte(cpu.hl, set(7, x))
+	case 0xF8: sys.b = set(7, sys.b); return 2
+	case 0xF9: sys.c = set(7, sys.c); return 2
+	case 0xFA: sys.d = set(7, sys.d); return 2
+	case 0xFB: sys.e = set(7, sys.e); return 2
+	case 0xFC: sys.wh(set(7, sys.h())); return 2
+	case 0xFD: sys.wl(set(7, sys.l())); return 2
+	case 0xFE: x := sys.readByte(sys.hl)
+		   sys.writeByte(sys.hl, set(7, x))
 		   return 4
-	case 0xFF: cpu.a = set(7, cpu.a); return 2
+	case 0xFF: sys.a = set(7, sys.a); return 2
 	}
-	panic("unreachable in cpu.Interpret (CB)")
+	panic("unreachable in sys.Interpret (CB)")
 }
 
-func (cpu *CPU) jr(pred bool) int {
-	x := cpu.fetchByte()
+func (sys *cpu) jr(pred bool) int {
+	x := sys.fetchByte()
 	if pred {
-		cpu.pc += uint16(int8(x))
+		sys.pc += uint16(int8(x))
 		return 12/4
 	}
 	return 8/4
 }
 
-func (cpu *CPU) ret(pred bool) int {
+func (sys *cpu) ret(pred bool) int {
 	if pred {
-		cpu.pc = cpu.pop()
+		sys.pc = sys.pop()
 		return 20/4
 	}
 	return 8/4
 }
 
-func (cpu *CPU) jp(pred bool) int {
-	x := cpu.fetchWord()
+func (sys *cpu) jp(pred bool) int {
+	x := sys.fetchWord()
 	if pred {
-		cpu.pc = x
+		sys.pc = x
 		return 16/4
 	}
 	return 12/4
 }
 
-func (cpu *CPU) call(pred bool) int {
-	x := cpu.fetchWord()
+func (sys *cpu) call(pred bool) int {
+	x := sys.fetchWord()
 	if pred {
-		cpu.push(cpu.pc)
-		cpu.pc = x
+		sys.push(sys.pc)
+		sys.pc = x
 		return 24/4
 	}
 	return 12/4
 }
 
-func (cpu *CPU) rst(addr uint16) int {
-	cpu.push(cpu.pc)
-	cpu.pc = addr
+func (sys *cpu) rst(addr uint16) int {
+	sys.push(sys.pc)
+	sys.pc = addr
 	return 32/4
 }
 
-func (cpu *CPU) push(x uint16) {
-	cpu.sp -= 2
-	cpu.WriteWord(cpu.sp, x)
-	//fmt.Printf("-> SP=%04Xh *=%04Xh\n", cpu.sp, x)
+func (sys *cpu) push(x uint16) {
+	sys.sp -= 2
+	sys.writeWord(sys.sp, x)
+	//fmt.Printf("-> SP=%04Xh *=%04Xh\n", sys.sp, x)
 }
 
-func (cpu *CPU) pop() uint16 {
-	x := cpu.ReadWord(cpu.sp)
-	//fmt.Printf("<- SP=%04Xh *=%04Xh\n", cpu.sp, x)
-	cpu.sp += 2
+func (sys *cpu) pop() uint16 {
+	x := sys.readWord(sys.sp)
+	//fmt.Printf("<- SP=%04Xh *=%04Xh\n", sys.sp, x)
+	sys.sp += 2
 	return x
 }
 
-func (cpu *CPU) inc(x byte) byte {
+func (sys *cpu) inc(x byte) byte {
 	y := x + 1
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = (y & 0x0F) == 0
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = (y & 0x0F) == 0
 	return y
 }
 
-func (cpu *CPU) dec(x byte) byte {
+func (sys *cpu) dec(x byte) byte {
 	y := x - 1
-	cpu.fz = y == 0
-	cpu.fn = true
-	cpu.fh = (y & 0x0F) == 0x0F
+	sys.fz = y == 0
+	sys.fn = true
+	sys.fh = (y & 0x0F) == 0x0F
 	return y
 }
 
-func (cpu *CPU) add16(x, y uint16) uint16 {
+func (sys *cpu) add16(x, y uint16) uint16 {
 	x1 := x + y
-	cpu.fn = false
-	cpu.fh = x1 & 0x0FFF < x & 0x0FFF
-	cpu.fc = x1 < x
+	sys.fn = false
+	sys.fh = x1 & 0x0FFF < x & 0x0FFF
+	sys.fc = x1 < x
 	return x1
 }
 
-func (cpu *CPU) add(x byte) {
-	y := cpu.a + x
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = y & 0x0F < cpu.a & 0x0F
-	cpu.fc = y < cpu.a
-	cpu.a = y
+func (sys *cpu) add(x byte) {
+	y := sys.a + x
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = y & 0x0F < sys.a & 0x0F
+	sys.fc = y < sys.a
+	sys.a = y
 }
 
-func (cpu *CPU) adc(x byte) {
+func (sys *cpu) adc(x byte) {
 	fc := byte(0)
-	if cpu.fc { fc = 1 }
-	y := cpu.a + x + fc
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = y & 0x0F < cpu.a & 0x0F
-	cpu.fc = y < cpu.a
-	cpu.a = y
+	if sys.fc { fc = 1 }
+	y := sys.a + x + fc
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = y & 0x0F < sys.a & 0x0F
+	sys.fc = y < sys.a
+	sys.a = y
 }
 
-func (cpu *CPU) sub(x byte) {
-	y := cpu.a - x
-	cpu.fz = y == 0
-	cpu.fn = true
-	cpu.fh = y & 0x0F > cpu.a & 0x0F
-	cpu.fc = y > cpu.a
-	cpu.a = y
+func (sys *cpu) sub(x byte) {
+	y := sys.a - x
+	sys.fz = y == 0
+	sys.fn = true
+	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fc = y > sys.a
+	sys.a = y
 }
 
-func (cpu *CPU) sbc(x byte) {
+func (sys *cpu) sbc(x byte) {
 	fc := byte(0)
-	if cpu.fc { fc = 1 }
-	y := cpu.a - x - fc
-	cpu.fz = y == 0
-	cpu.fn = true
-	cpu.fh = y & 0x0F > cpu.a & 0x0F
-	cpu.fc = y > cpu.a
-	cpu.a = y
+	if sys.fc { fc = 1 }
+	y := sys.a - x - fc
+	sys.fz = y == 0
+	sys.fn = true
+	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fc = y > sys.a
+	sys.a = y
 }
 
-func (cpu *CPU) and(x byte) {
-	cpu.a &= x
-	cpu.fz = cpu.a == 0
-	cpu.fn = false
-	cpu.fh = true
-	cpu.fc = false
+func (sys *cpu) and(x byte) {
+	sys.a &= x
+	sys.fz = sys.a == 0
+	sys.fn = false
+	sys.fh = true
+	sys.fc = false
 }
 
-func (cpu *CPU) xor(x byte) {
-	cpu.a ^= x
-	cpu.fz = cpu.a == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = false
+func (sys *cpu) xor(x byte) {
+	sys.a ^= x
+	sys.fz = sys.a == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = false
 }
 
-func (cpu *CPU) or(x byte) {
-	cpu.a |= x
-	cpu.fz = cpu.a == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = false
+func (sys *cpu) or(x byte) {
+	sys.a |= x
+	sys.fz = sys.a == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = false
 }
 
-func (cpu *CPU) cp(x byte) {
-	y := cpu.a - x
-	cpu.fz = y == 0
-	cpu.fn = true
-	cpu.fh = y & 0x0F > cpu.a & 0x0F
-	cpu.fc = y > cpu.a
+func (sys *cpu) cp(x byte) {
+	y := sys.a - x
+	sys.fz = y == 0
+	sys.fn = true
+	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fc = y > sys.a
 }
 
-func (cpu *CPU) rlc(x byte) byte {
+func (sys *cpu) rlc(x byte) byte {
 	fc := x >> 7
 	y := x << 1 | fc
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = fc == 1
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = fc == 1
 	return y
 }
 
-func (cpu *CPU) rrc(x byte) byte {
+func (sys *cpu) rrc(x byte) byte {
 	fc := x << 7
 	y := x >> 1 | fc
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = fc == 0x80
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = fc == 0x80
 	return y
 }
 
-func (cpu *CPU) rl(x byte) byte {
+func (sys *cpu) rl(x byte) byte {
 	fc := byte(0)
-	if cpu.fc { fc = 1 }
+	if sys.fc { fc = 1 }
 	y := x << 1 | fc
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = x & 1 == 1
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = x & 1 == 1
 	return y
 }
 
-func (cpu *CPU) rr(x byte) byte {
+func (sys *cpu) rr(x byte) byte {
 	fc := byte(0)
-	if cpu.fc { fc = 0x80 }
+	if sys.fc { fc = 0x80 }
 	y := x >> 1 | fc
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = x & 0x80 == 0x80
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = x & 0x80 == 0x80
 	return y
 }
 
-func (cpu *CPU) sla(x byte) byte {
+func (sys *cpu) sla(x byte) byte {
 	y := x << 1
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = x & 0x80 == 0x80
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = x & 0x80 == 0x80
 	return y
 }
 
-func (cpu *CPU) sra(x byte) byte {
+func (sys *cpu) sra(x byte) byte {
 	y := byte(int8(x) >> 1)
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = x & 1 == 1
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = x & 1 == 1
 	return y
 }
 
-func (cpu *CPU) srl(x byte) byte {
+func (sys *cpu) srl(x byte) byte {
 	y := x >> 1
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = x & 1 == 1
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = x & 1 == 1
 	return y
 }
 
-func (cpu *CPU) swap(x byte) byte {
+func (sys *cpu) swap(x byte) byte {
 	y := x >> 4 | x << 4
-	cpu.fz = y == 0
-	cpu.fn = false
-	cpu.fh = false
-	cpu.fc = false
+	sys.fz = y == 0
+	sys.fn = false
+	sys.fh = false
+	sys.fc = false
 	return y
 }
 
-func (cpu *CPU) bit(n, x byte) {
-	cpu.fz = x & (1 << n) != 0
-	cpu.fn = false
-	cpu.fh = true
+func (sys *cpu) bit(n, x byte) {
+	sys.fz = x & (1 << n) != 0
+	sys.fn = false
+	sys.fh = true
 }
 
 func res(n, x byte) byte {
@@ -1488,102 +1488,102 @@ func set(n, x byte) byte {
 // DAA and DAS implementations based on pseudocode from 80386
 // instruction set references.
 
-func (cpu *CPU) daa() {
-	if cpu.a & 0x0F > 9 || cpu.fh {
-		cpu.a += 6
-		cpu.fh = true
+func (sys *cpu) daa() {
+	if sys.a & 0x0F > 9 || sys.fh {
+		sys.a += 6
+		sys.fh = true
 	} else {
-		cpu.fh = false
+		sys.fh = false
 	}
-	if cpu.a > 0x9F || cpu.fc {
-		cpu.a += 0x60
-		cpu.fc = true
+	if sys.a > 0x9F || sys.fc {
+		sys.a += 0x60
+		sys.fc = true
 	} else {
-		cpu.fc = false
+		sys.fc = false
 	}
-	cpu.fz = cpu.a == 0
+	sys.fz = sys.a == 0
 }
 
-func (cpu *CPU) das() {
-	if cpu.a & 0x0F > 9 || cpu.fh {
-		cpu.a -= 6
-		cpu.fh = true
+func (sys *cpu) das() {
+	if sys.a & 0x0F > 9 || sys.fh {
+		sys.a -= 6
+		sys.fh = true
 	} else {
-		cpu.fh = false
+		sys.fh = false
 	}
-	if cpu.a > 0x9F || cpu.fc {
-		cpu.a -= 0x60
-		cpu.fc = true
+	if sys.a > 0x9F || sys.fc {
+		sys.a -= 0x60
+		sys.fc = true
 	} else {
-		cpu.fc = false
+		sys.fc = false
 	}
-	cpu.fz = cpu.a == 0
+	sys.fz = sys.a == 0
 }
 
-func (cpu *CPU) af() uint16 {
-	a := uint16(cpu.a)
+func (sys *cpu) af() uint16 {
+	a := uint16(sys.a)
 	f := uint16(0)
-	if cpu.fz { f |= 0x80 }
-	if cpu.fn { f |= 0x40 }
-	if cpu.fh { f |= 0x20 }
-	if cpu.fc { f |= 0x10 }
+	if sys.fz { f |= 0x80 }
+	if sys.fn { f |= 0x40 }
+	if sys.fh { f |= 0x20 }
+	if sys.fc { f |= 0x10 }
 	return (a << 8) | f
 }
 
-func (cpu *CPU) waf(x uint16) {
-	cpu.a = byte(x >> 8)
-	cpu.fz = (x & 0x80) == 0x80
-	cpu.fn = (x & 0x40) == 0x40
-	cpu.fh = (x & 0x20) == 0x20
-	cpu.fc = (x & 0x10) == 0x10
+func (sys *cpu) waf(x uint16) {
+	sys.a = byte(x >> 8)
+	sys.fz = (x & 0x80) == 0x80
+	sys.fn = (x & 0x40) == 0x40
+	sys.fh = (x & 0x20) == 0x20
+	sys.fc = (x & 0x10) == 0x10
 }
 
-func (cpu *CPU) bc() uint16 {
-	b := uint16(cpu.b)
-	c := uint16(cpu.c)
+func (sys *cpu) bc() uint16 {
+	b := uint16(sys.b)
+	c := uint16(sys.c)
 	return (b << 8) | c
 }
 
-func (cpu *CPU) wbc(x uint16) {
-	cpu.b = byte(x >> 8)
-	cpu.c = byte(x)
+func (sys *cpu) wbc(x uint16) {
+	sys.b = byte(x >> 8)
+	sys.c = byte(x)
 }
 
-func (cpu *CPU) de() uint16 {
-	d := uint16(cpu.d)
-	e := uint16(cpu.e)
+func (sys *cpu) de() uint16 {
+	d := uint16(sys.d)
+	e := uint16(sys.e)
 	return (d << 8) | e
 }
 
-func (cpu *CPU) wde(x uint16) {
-	cpu.d = byte(x >> 8)
-	cpu.e = byte(x)
+func (sys *cpu) wde(x uint16) {
+	sys.d = byte(x >> 8)
+	sys.e = byte(x)
 }
 
-func (cpu *CPU) h() byte {
-	return byte(cpu.hl >> 8)
+func (sys *cpu) h() byte {
+	return byte(sys.hl >> 8)
 }
 
-func (cpu *CPU) wh(x byte) {
-	cpu.hl = (uint16(x) << 8) | (cpu.hl & 0xFF)
+func (sys *cpu) wh(x byte) {
+	sys.hl = (uint16(x) << 8) | (sys.hl & 0xFF)
 }
 
-func (cpu *CPU) l() byte {
-	return byte(cpu.hl)
+func (sys *cpu) l() byte {
+	return byte(sys.hl)
 }
 
-func (cpu *CPU) wl(x byte) {
-	cpu.hl = uint16(x) | (cpu.hl & 0xFF00)
+func (sys *cpu) wl(x byte) {
+	sys.hl = uint16(x) | (sys.hl & 0xFF00)
 }
 
-func (cpu *CPU) fetchByte() byte {
-	pc := cpu.pc
-	cpu.pc++
-	return cpu.ReadByte(pc)
+func (sys *cpu) fetchByte() byte {
+	pc := sys.pc
+	sys.pc++
+	return sys.readByte(pc)
 }
 
-func (cpu *CPU) fetchWord() uint16 {
-	pc := cpu.pc
-	cpu.pc += 2
-	return cpu.ReadWord(pc)
+func (sys *cpu) fetchWord() uint16 {
+	pc := sys.pc
+	sys.pc += 2
+	return sys.readWord(pc)
 }

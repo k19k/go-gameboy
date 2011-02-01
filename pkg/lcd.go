@@ -36,15 +36,15 @@ const (
 	refreshTicks  = scanlineTicks * screenH + vblankTicks
 )
 
-type GPU struct {
-	*MBC
+type lcd struct {
+	*memory
+	*sdl.Surface
 	clock int
 	pal []uint32
-	screen *sdl.Surface
 	frameTime int64
 }
 
-func NewGPU(m *MBC) *GPU {
+func newLCD(m *memory) *lcd {
 	screen := sdl.SetVideoMode(screenW, screenH, 0, sdl.DOUBLEBUF)
 	pal := make([]uint32, 4)
 	pal[0] = sdl.MapRGBA(screen.Format, 0x9B, 0xBC, 0x0F, 0)
@@ -54,102 +54,102 @@ func NewGPU(m *MBC) *GPU {
 	screen.FillRect(nil, pal[0])
 	screen.Flip()
 	time := time.Nanoseconds()
-	return &GPU{MBC: m, pal: pal, screen: screen, frameTime: time}
+	return &lcd{memory: m, Surface: screen,	pal: pal, frameTime: time}
 }
 
-func (gpu *GPU) Step(t int) {
-	gpu.clock += t
-	if gpu.clock >= refreshTicks {
-		gpu.clock -= refreshTicks
+func (scr *lcd) step(t int) {
+	scr.clock += t
+	if scr.clock >= refreshTicks {
+		scr.clock -= refreshTicks
 	}
 
-	ly := byte(gpu.clock / scanlineTicks)
-	gpu.WritePort(PortLY, ly)
-	mode := calcMode(gpu.clock, ly)
-	if mode == gpu.LCDMode {
+	ly := byte(scr.clock / scanlineTicks)
+	scr.writePort(portLY, ly)
+	mode := calcMode(scr.clock, ly)
+	if mode == scr.lcdMode {
 		return;
 	}
-	gpu.LCDMode = mode
+	scr.lcdMode = mode
 
-	stat := gpu.ReadPort(PortSTAT) &^ 3 | mode
-	irq := gpu.ReadPort(PortIF)
+	stat := scr.readPort(portSTAT) &^ 3 | mode
+	irq := scr.readPort(portIF)
 
 	switch mode {
 	case modeOAM:
-		if gpu.OAMInterrupt {
-			gpu.WritePort(PortIF, irq | 0x02)
+		if scr.oamInterrupt {
+			scr.writePort(portIF, irq | 0x02)
 		}
-		if lyc := gpu.ReadPort(PortLYC); ly-1 == lyc {
+		if lyc := scr.readPort(portLYC); ly-1 == lyc {
 			stat |= 0x04
-			if gpu.LYCInterrupt {
-				gpu.WritePort(PortIF, irq | 0x02)
+			if scr.lycInterrupt {
+				scr.writePort(portIF, irq | 0x02)
 			}
 		} else {
 			stat &^= 0x04
 		}
 	case modeVRAM:
-		if gpu.LCDEnable {
-			gpu.scanline(ly)
+		if scr.lcdEnable {
+			scr.scanline(ly)
 		}
 	case modeHBlank:
-		if gpu.HBlankInterrupt {
-			gpu.WritePort(PortIF, irq | 0x02)
+		if scr.hblankInterrupt {
+			scr.writePort(portIF, irq | 0x02)
 		}
 	case modeVBlank:
-		if gpu.VBlankInterrupt {
+		if scr.vblankInterrupt {
 			irq |= 0x02
 		}
-		gpu.WritePort(PortIF, irq | 0x01)
-		if !gpu.LCDEnable {
-			gpu.screen.FillRect(nil, gpu.pal[0])
+		scr.writePort(portIF, irq | 0x01)
+		if !scr.lcdEnable {
+			scr.FillRect(nil, scr.pal[0])
 		}
-		gpu.screen.Flip()
-		gpu.delay()
-		gpu.PumpEvents()
+		scr.Flip()
+		scr.delay()
+		scr.pumpEvents()
 	}
 
-	gpu.WritePort(PortSTAT, stat)
+	scr.writePort(portSTAT, stat)
 }
 
-func (gpu *GPU) delay() {
+func (scr *lcd) delay() {
 	now := time.Nanoseconds()
-	delta := now - gpu.frameTime
+	delta := now - scr.frameTime
 	target := 16742706 - delta
 	if target > 0 {
 		time.Sleep(target)
 	}
-	gpu.frameTime = time.Nanoseconds()
+	scr.frameTime = time.Nanoseconds()
 }
 
-func (gpu *GPU) scanline(ly byte) {
-	scy := gpu.ReadPort(PortSCY)
-	scx := gpu.ReadPort(PortSCX)
-	wy := gpu.ReadPort(PortWY)
-	wx := gpu.ReadPort(PortWX)
+func (scr *lcd) scanline(ly byte) {
+	scy := scr.readPort(portSCY)
+	scx := scr.readPort(portSCX)
+	wy := scr.readPort(portWY)
+	wx := scr.readPort(portWX)
 
-	if gpu.BGEnable {
-		gpu.rleline(gpu.BGMap, byte(0), ly, scx, scy)
+	if scr.bgEnable {
+		scr.rleline(scr.bgMap, byte(0), ly, scx, scy)
 	}
 
-	if gpu.WindowEnable && wx < 167 && wy < 144 && ly >= wy {
+	if scr.windowEnable && wx < 167 && wy < 144 && ly >= wy {
 		x := int(wx) - 7
 		xoff := -x
 		if x < 0 { x = 0 }
-		gpu.rleline(gpu.WindowMap, byte(x), ly, byte(xoff), byte(-wy))
+		scr.rleline(scr.windowMap, byte(x), ly, byte(xoff), byte(-wy))
 	}
 
-	if gpu.SpriteEnable {
+	if scr.spriteEnable {
 		count := 0
 		idx := 0
 		// TODO sprite priorities for overlapping sprites at
 		// different x-coordinates (lower x-coordinate wins)
 		for idx < 0xA0 && count < 10 {
-			y := int(gpu.oam[idx]) - 16; idx++
-			x := int(gpu.oam[idx]) - 8; idx++
-			tile := int(gpu.oam[idx]); idx++
-			info := gpu.oam[idx]; idx++
+			y := int(scr.oam[idx]) - 16; idx++
+			x := int(scr.oam[idx]) - 8; idx++
+			tile := int(scr.oam[idx]); idx++
+			info := scr.oam[idx]; idx++
 			h := 8
-			if gpu.SpriteSize { h = 16; tile &= 0xFE }
+			if scr.spriteSize { h = 16; tile &= 0xFE }
 			if int(ly) < y || int(ly) >= y + h { continue }
 			count++
 			if x == -8 || x >= 168 { continue }
@@ -166,7 +166,7 @@ func (gpu *GPU) scanline(ly byte) {
 				if xi < 0 { continue }
 				if xi >= screenW { continue }
 				if masked {
-					px := gpu.mapAt(gpu.BGMap,
+					px := scr.mapAt(scr.bgMap,
 						xi + int(scx),
 						int(ly) + int(scy))
 					if px != 0 ||
@@ -175,27 +175,27 @@ func (gpu *GPU) scanline(ly byte) {
 				}
 				bit := uint(i)
 				if !xflip { bit = uint(7 - i) }
-				px := (gpu.vram[tile] >> bit) & 1
-				px |= ((gpu.vram[tile+1] >> bit) & 1) << 1
+				px := (scr.vram[tile] >> bit) & 1
+				px |= ((scr.vram[tile+1] >> bit) & 1) << 1
 				if px != 0 {
-					color := gpu.pal[gpu.OBP[palidx][px]]
+					color := scr.pal[scr.obp[palidx][px]]
 					rect.X = int16(xi) * scale
-					gpu.screen.FillRect(rect, color)
+					scr.FillRect(rect, color)
 				}
 			}
 		}
 	}
 }
 
-func (gpu *GPU) rleline(map1 bool, x, y, xoff, yoff byte) {
+func (scr *lcd) rleline(map1 bool, x, y, xoff, yoff byte) {
 	r := &sdl.Rect{ X: int16(x) * scale,
 		Y: int16(y) * scale, W: scale, H: scale }
 	y += yoff
-	cur := gpu.mapAt(map1, int(x + xoff), int(y))
+	cur := scr.mapAt(map1, int(x + xoff), int(y))
 	for x++; x < lcdW; x++ {
-		b := gpu.mapAt(map1, int(x + xoff), int(y))
+		b := scr.mapAt(map1, int(x + xoff), int(y))
 		if b != cur {
-			gpu.screen.FillRect(r, gpu.pal[gpu.BGP[cur]])
+			scr.FillRect(r, scr.pal[scr.bgp[cur]])
 			cur = b
 			r.X = int16(x) * scale
 			r.W = scale
@@ -203,26 +203,26 @@ func (gpu *GPU) rleline(map1 bool, x, y, xoff, yoff byte) {
 			r.W += scale
 		}
 	}
-	gpu.screen.FillRect(r, gpu.pal[gpu.BGP[cur]])
+	scr.FillRect(r, scr.pal[scr.bgp[cur]])
 }
 
-func (gpu *GPU) mapAt(map1 bool, x, y int) byte {
+func (scr *lcd) mapAt(map1 bool, x, y int) byte {
 	idx := (y / tileH) * mapW + x / tileW
 	if map1 {
 		idx += 0x1C00
 	} else {
 		idx += 0x1800
 	}
-	tile := gpu.vram[idx]
-	if gpu.TileData {
+	tile := scr.vram[idx]
+	if scr.tileData {
 		idx = int(tile) * 16
 	} else {
 		idx = 0x1000 + int(int8(tile)) * 16
 	}
 	idx += (y % tileH) * 2
 	bit := uint(tileW - 1 - x % tileW)
-	px := (gpu.vram[idx] >> bit) & 1
-	px |= ((gpu.vram[idx+1] >> bit) & 1) << 1
+	px := (scr.vram[idx] >> bit) & 1
+	px |= ((scr.vram[idx+1] >> bit) & 1) << 1
 	return px
 }
 

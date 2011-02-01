@@ -7,73 +7,63 @@ import (
 )
 
 const (
-	PortJOYP = 0xFF00
-	PortSB   = 0xFF01
-	PortSC   = 0xFF02
-	PortDIV  = 0xFF04
-	PortTIMA = 0xFF05
-	PortTMA  = 0xFF06
-	PortTAC  = 0xFF07
-	PortIF   = 0xFF0F
-	PortNR10 = 0xFF10
-	PortNR11 = 0xFF11
-	PortNR12 = 0xFF12
-	PortNR13 = 0xFF13
-	PortNR14 = 0xFF14
-	PortNR21 = 0xFF16
-	PortNR22 = 0xFF17
-	PortNR23 = 0xFF18
-	PortNR24 = 0xFF19
-	PortNR30 = 0xFF1A
-	PortNR31 = 0xFF1B
-	PortNR32 = 0xFF1C
-	PortNR33 = 0xFF1D
-	PortNR34 = 0xFF1E
-	PortNR41 = 0xFF20
-	PortNR42 = 0xFF21
-	PortNR43 = 0xFF22
-	PortNR44 = 0xFF23
-	PortNR50 = 0xFF24
-	PortNR51 = 0xFF25
-	PortNR52 = 0xFF26
-	PortLCDC = 0xFF40
-	PortSTAT = 0xFF41
-	PortSCY  = 0xFF42
-	PortSCX  = 0xFF43
-	PortLY   = 0xFF44
-	PortLYC  = 0xFF45
-	PortDMA  = 0xFF46
-	PortBGP  = 0xFF47
-	PortOBP0 = 0xFF48
-	PortOBP1 = 0xFF49
-	PortWY   = 0xFF4A
-	PortWX   = 0xFF4B
-	PortIE   = 0xFFFF
+	portJOYP = 0xFF00
+	portSB   = 0xFF01
+	portSC   = 0xFF02
+	portDIV  = 0xFF04
+	portTIMA = 0xFF05
+	portTMA  = 0xFF06
+	portTAC  = 0xFF07
+	portIF   = 0xFF0F
+	portNR10 = 0xFF10
+	portNR11 = 0xFF11
+	portNR12 = 0xFF12
+	portNR13 = 0xFF13
+	portNR14 = 0xFF14
+	portNR21 = 0xFF16
+	portNR22 = 0xFF17
+	portNR23 = 0xFF18
+	portNR24 = 0xFF19
+	portNR30 = 0xFF1A
+	portNR31 = 0xFF1B
+	portNR32 = 0xFF1C
+	portNR33 = 0xFF1D
+	portNR34 = 0xFF1E
+	portNR41 = 0xFF20
+	portNR42 = 0xFF21
+	portNR43 = 0xFF22
+	portNR44 = 0xFF23
+	portNR50 = 0xFF24
+	portNR51 = 0xFF25
+	portNR52 = 0xFF26
+	portLCDC = 0xFF40
+	portSTAT = 0xFF41
+	portSCY  = 0xFF42
+	portSCX  = 0xFF43
+	portLY   = 0xFF44
+	portLYC  = 0xFF45
+	portDMA  = 0xFF46
+	portBGP  = 0xFF47
+	portOBP0 = 0xFF48
+	portOBP1 = 0xFF49
+	portWY   = 0xFF4A
+	portWX   = 0xFF4B
+	portIE   = 0xFFFF
 )
 
 const (
-	VBlankAddr	= 0x0040
-	LCDStatusAddr	= 0x0048
-	TimerAddr	= 0x0050
-	SerialAddr	= 0x0058
-	JoypadAddr	= 0x0060
+	vblankAddr	= 0x0040
+	lcdStatusAddr	= 0x0048
+	timerAddr	= 0x0050
+	serialAddr	= 0x0058
+	joypadAddr	= 0x0060
 )
 
 const (
 	divOverflow = 64
 )
 
-type MemoryUnit interface {
-	ReadByte(addr uint16) byte
-	WriteByte(addr uint16, x byte)
-	ReadWord(addr uint16) uint16
-	WriteWord(addr uint16, x uint16)
-	ReadPort(addr uint16) byte
-	WritePort(addr uint16, x byte)
-	UpdateTimers(t int)
-}
-
-type MBC struct {
+type memory struct {
 	rom []byte
 	vram [0x2000]byte
 	eram [0x8000]byte
@@ -86,18 +76,18 @@ type MBC struct {
 	ramMode bool
 
 	// LCDC flags
-	LCDEnable bool
-	WindowMap bool
-	WindowEnable bool
-	TileData bool
-	BGMap bool
-	SpriteSize bool
-	SpriteEnable bool
-	BGEnable bool
+	lcdEnable bool
+	windowMap bool
+	windowEnable bool
+	tileData bool
+	bgMap bool
+	spriteSize bool
+	spriteEnable bool
+	bgEnable bool
 
 	// STAT flags
-	LYCInterrupt, OAMInterrupt, VBlankInterrupt, HBlankInterrupt bool
-	LCDMode byte
+	lycInterrupt, oamInterrupt, vblankInterrupt, hblankInterrupt bool
+	lcdMode byte
 
 	divTicks int
 	timaTicks int
@@ -106,15 +96,11 @@ type MBC struct {
 	dpadBits byte
 	btnBits byte
 
-	BGP [4]byte
-	OBP [2][4]byte
+	bgp [4]byte
+	obp [2][4]byte
 }
 
-func (m *MBC) String() string {
-	return fmt.Sprintf("<MBC %p>", m)
-}
-
-func (m *MBC) Dump(w io.Writer) {
+func (m *memory) dump(w io.Writer) {
 	var addr int
 
 	read := func () (x byte, e interface{}) {
@@ -122,7 +108,7 @@ func (m *MBC) Dump(w io.Writer) {
 			e = recover()
 			addr++
 		}()
-		return m.ReadByte(uint16(addr)), e
+		return m.readByte(uint16(addr)), e
 	}
 
 	fmt.Fprintf(w, "MEMORY DUMP ---- ROM BANK: %d -- ERAM BANK: %d\n",
@@ -164,238 +150,238 @@ func (m *MBC) Dump(w io.Writer) {
 	fmt.Fprint(w, "\n")
 }
 
-func (m *MBC) ReadByte(addr uint16) byte {
+func (m *memory) readByte(addr uint16) byte {
 	switch {
 	case addr < 0x8000:
-		return m.ReadROM(addr)
+		return m.readROM(addr)
 	case addr < 0xA000:
-		return m.ReadVideoRAM(addr)
+		return m.readVideoRAM(addr)
 	case addr < 0xC000:
-		return m.ReadExternalRAM(addr)
+		return m.readExternalRAM(addr)
 	case addr < 0xE000:
-		return m.ReadWorkRAM(addr)
+		return m.readWorkRAM(addr)
 	case addr < 0xFE00:
-		return m.ReadWorkRAM(addr - 0x2000)
+		return m.readWorkRAM(addr - 0x2000)
 	case addr < 0xFEA0:
-		return m.ReadOAM(addr)
+		return m.readOAM(addr)
 	case addr >= 0xFF00:
-		return m.ReadPort(addr)
+		return m.readPort(addr)
 	}
 	return 0
 }
 
-func (m *MBC) WriteByte(addr uint16, x byte) {
+func (m *memory) writeByte(addr uint16, x byte) {
 	switch {
 	case addr < 0x8000:
-		m.WriteROM(addr, x)
+		m.writeROM(addr, x)
 	case addr < 0xA000:
-		m.WriteVideoRAM(addr, x)
+		m.writeVideoRAM(addr, x)
 	case addr < 0xC000:
-		m.WriteExternalRAM(addr, x)
+		m.writeExternalRAM(addr, x)
 	case addr < 0xE000:
-		m.WriteWorkRAM(addr, x)
+		m.writeWorkRAM(addr, x)
 	case addr < 0xFE00:
-		m.WriteWorkRAM(addr - 0x2000, x)
+		m.writeWorkRAM(addr - 0x2000, x)
 	case addr < 0xFEA0:
-		m.WriteOAM(addr, x)
+		m.writeOAM(addr, x)
 	case addr >= 0xFF00:
-		m.WritePort(addr, x)
+		m.writePort(addr, x)
 	}
 }
 
-func (m *MBC) ReadWord(addr uint16) uint16 {
-	lo := uint16(m.ReadByte(addr))
-	hi := uint16(m.ReadByte(addr+1))
+func (m *memory) readWord(addr uint16) uint16 {
+	lo := uint16(m.readByte(addr))
+	hi := uint16(m.readByte(addr+1))
 	return (hi << 8) | lo
 }
 
-func (m *MBC) WriteWord(addr uint16, x uint16) {
-	m.WriteByte(addr, uint8(x & 0xFF))
-	m.WriteByte(addr+1, uint8(x >> 8))
+func (m *memory) writeWord(addr uint16, x uint16) {
+	m.writeByte(addr, uint8(x & 0xFF))
+	m.writeByte(addr+1, uint8(x >> 8))
 }
 
-func NewMBC(rom []byte) *MBC {
-	mbc := &MBC{rom: rom, dpadBits: 0xF, btnBits: 0xF}
-	mbc.WritePort(PortJOYP, 0x30)
-	mbc.WritePort(PortNR10, 0x80)
-	mbc.WritePort(PortNR11, 0xBF)
-	mbc.WritePort(PortNR12, 0xF3)
-	mbc.WritePort(PortNR14, 0xB4)
-	mbc.WritePort(PortNR21, 0x3F)
-	mbc.WritePort(PortNR24, 0xBF)
-	mbc.WritePort(PortNR30, 0x7F)
-	mbc.WritePort(PortNR31, 0xFF)
-	mbc.WritePort(PortNR32, 0x9F)
-	mbc.WritePort(PortNR33, 0xBF)
-	mbc.WritePort(PortNR41, 0xFF)
-	mbc.WritePort(PortNR44, 0xBF)
-	mbc.WritePort(PortNR50, 0x77)
-	mbc.WritePort(PortNR51, 0xF3)
-	mbc.WritePort(PortNR52, 0xF1)
-	mbc.WritePort(PortLCDC, 0x91)
-	mbc.WritePort(PortBGP,  0xFC)
-	mbc.WritePort(PortOBP0, 0xFF)
-	mbc.WritePort(PortOBP1, 0xFF)
-	return mbc
+func newMemory(rom []byte) *memory {
+	m := &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+	m.writePort(portJOYP, 0x30)
+	m.writePort(portNR10, 0x80)
+	m.writePort(portNR11, 0xBF)
+	m.writePort(portNR12, 0xF3)
+	m.writePort(portNR14, 0xB4)
+	m.writePort(portNR21, 0x3F)
+	m.writePort(portNR24, 0xBF)
+	m.writePort(portNR30, 0x7F)
+	m.writePort(portNR31, 0xFF)
+	m.writePort(portNR32, 0x9F)
+	m.writePort(portNR33, 0xBF)
+	m.writePort(portNR41, 0xFF)
+	m.writePort(portNR44, 0xBF)
+	m.writePort(portNR50, 0x77)
+	m.writePort(portNR51, 0xF3)
+	m.writePort(portNR52, 0xF1)
+	m.writePort(portLCDC, 0x91)
+	m.writePort(portBGP,  0xFC)
+	m.writePort(portOBP0, 0xFF)
+	m.writePort(portOBP1, 0xFF)
+	return m
 }
 
-func (mbc *MBC) ReadROM(addr uint16) byte {
+func (m *memory) readROM(addr uint16) byte {
 	if addr < 0x4000 {
-		return mbc.rom[addr]
+		return m.rom[addr]
 	}
-	return mbc.rom[int(addr) - 0x4000 + mbc.romBank * 0x4000]
+	return m.rom[int(addr) - 0x4000 + m.romBank * 0x4000]
 }
 
-func (mbc *MBC) WriteROM(addr uint16, x byte) {
+func (m *memory) writeROM(addr uint16, x byte) {
 	switch {
 	case addr >= 0x6000:
-		mbc.ramMode = x & 1 == 1
-		if mbc.ramMode {
-			mbc.romBank &= 0x1F
+		m.ramMode = x & 1 == 1
+		if m.ramMode {
+			m.romBank &= 0x1F
 		} else {
-			mbc.eramBank = 0
+			m.eramBank = 0
 		}
 	case addr >= 0x4000:
-		if mbc.ramMode {
-			mbc.eramBank = uint16(x) & 3
+		if m.ramMode {
+			m.eramBank = uint16(x) & 3
 		} else {
-			mbc.romBank &= 0x1F
-			mbc.romBank |= (int(x) & 3) << 5
-			//fmt.Printf("rom.56 = %x (%02x)\n", x, mbc.romBank)
+			m.romBank &= 0x1F
+			m.romBank |= (int(x) & 3) << 5
+			//fmt.Printf("rom.56 = %x (%02x)\n", x, m.romBank)
 		}
 	case addr >= 0x2000:
 		x &= 0x1F
 		if x == 0 { x = 1 }
-		mbc.romBank &= 0x60
-		mbc.romBank |= int(x)
-		//fmt.Printf("rom.01234 = %x (%02x)\n", x & 0x1F, mbc.romBank)
+		m.romBank &= 0x60
+		m.romBank |= int(x)
+		//fmt.Printf("rom.01234 = %x (%02x)\n", x & 0x1F, m.romBank)
 	}
-	//fmt.Printf("ROM BANK = %d   RAM BANK = %d\n", mbc.romBank, mbc.eramBank)
+	//fmt.Printf("ROM BANK = %d   RAM BANK = %d\n", m.romBank, m.eramBank)
 }
 
-func (mbc *MBC) ReadVideoRAM(addr uint16) byte {
-	return mbc.vram[addr - 0x8000]
+func (m *memory) readVideoRAM(addr uint16) byte {
+	return m.vram[addr - 0x8000]
 }
 
-func (mbc *MBC) WriteVideoRAM(addr uint16, x byte) {
-	mbc.vram[addr - 0x8000] = x
+func (m *memory) writeVideoRAM(addr uint16, x byte) {
+	m.vram[addr - 0x8000] = x
 }
 
-func (mbc *MBC) ReadExternalRAM(addr uint16) byte {
-	return mbc.eram[addr - 0xA000 + mbc.eramBank * 0x2000]
+func (m *memory) readExternalRAM(addr uint16) byte {
+	return m.eram[addr - 0xA000 + m.eramBank * 0x2000]
 }
 
-func (mbc *MBC) WriteExternalRAM(addr uint16, x byte) {
-	mbc.eram[addr - 0xA000 + mbc.eramBank * 0x2000] = x
+func (m *memory) writeExternalRAM(addr uint16, x byte) {
+	m.eram[addr - 0xA000 + m.eramBank * 0x2000] = x
 }
 
-func (mbc *MBC) ReadWorkRAM(addr uint16) byte {
-	return mbc.wram[addr - 0xC000]
+func (m *memory) readWorkRAM(addr uint16) byte {
+	return m.wram[addr - 0xC000]
 }
 
-func (mbc *MBC) WriteWorkRAM(addr uint16, x byte) {
-	mbc.wram[addr - 0xC000] = x
+func (m *memory) writeWorkRAM(addr uint16, x byte) {
+	m.wram[addr - 0xC000] = x
 }
 
-func (mbc *MBC) ReadOAM(addr uint16) byte {
-	return mbc.oam[addr - 0xFE00]
+func (m *memory) readOAM(addr uint16) byte {
+	return m.oam[addr - 0xFE00]
 }
 
-func (mbc *MBC) WriteOAM(addr uint16, x byte) {
-	mbc.oam[addr - 0xFE00] = x
+func (m *memory) writeOAM(addr uint16, x byte) {
+	m.oam[addr - 0xFE00] = x
 }
 
-func (mbc *MBC) ReadPort(addr uint16) byte {
-	return mbc.hram[addr - 0xFF00]
+func (m *memory) readPort(addr uint16) byte {
+	return m.hram[addr - 0xFF00]
 }
 
-func (mbc *MBC) WritePort(addr uint16, x byte) {
+func (m *memory) writePort(addr uint16, x byte) {
 	switch addr {
-	case PortJOYP:
+	case portJOYP:
 		x &= 0x30
 		switch x {
 		case 0x00: x |= 0x0F
-		case 0x10: x |= mbc.btnBits
-		case 0x20: x |= mbc.dpadBits
+		case 0x10: x |= m.btnBits
+		case 0x20: x |= m.dpadBits
 		case 0x30: x |= 0x0F
 		}
-	case PortDIV:
+	case portDIV:
 		x = 0
-	case PortTAC:
+	case portTAC:
 		switch x & 3 {
-		case 0: mbc.timaOverflow = 256
-		case 1: mbc.timaOverflow = 4
-		case 2: mbc.timaOverflow = 16
-		case 3: mbc.timaOverflow = 64
+		case 0: m.timaOverflow = 256
+		case 1: m.timaOverflow = 4
+		case 2: m.timaOverflow = 16
+		case 3: m.timaOverflow = 64
 		}
-		mbc.timaTicks = 0
-	case PortLCDC:
-		mbc.LCDEnable = x & 0x80 != 0
-		mbc.WindowMap = x & 0x40 != 0
-		mbc.WindowEnable = x & 0x20 != 0
-		mbc.TileData = x & 0x10 != 0
-		mbc.BGMap = x & 0x08 != 0
-		mbc.SpriteSize = x & 0x04 != 0
-		mbc.SpriteEnable = x & 0x02 != 0
-		mbc.BGEnable = x & 0x01 != 0
-	case PortSTAT:
-		mbc.LYCInterrupt = x & 0x40 != 0
-		mbc.OAMInterrupt = x & 0x20 != 0
-		mbc.VBlankInterrupt = x & 0x10 != 0
-		mbc.HBlankInterrupt = x & 0x08 != 0
-		mbc.LCDMode = x & 0x03
-	case PortBGP:
-		mbc.BGP[0] = x & 3
-		mbc.BGP[1] = (x >> 2) & 3
-		mbc.BGP[2] = (x >> 4) & 3
-		mbc.BGP[3] = (x >> 6)
-	case PortOBP0:
-		mbc.OBP[0][0] = x & 3
-		mbc.OBP[0][1] = (x >> 2) & 3
-		mbc.OBP[0][2] = (x >> 4) & 3
-		mbc.OBP[0][3] = x >> 6
-	case PortOBP1:
-		mbc.OBP[1][0] = x & 3
-		mbc.OBP[1][1] = (x >> 2) & 3
-		mbc.OBP[1][2] = (x >> 4) & 3
-		mbc.OBP[1][3] = x >> 6
-	case PortDMA:
+		m.timaTicks = 0
+	case portLCDC:
+		m.lcdEnable = x & 0x80 != 0
+		m.windowMap = x & 0x40 != 0
+		m.windowEnable = x & 0x20 != 0
+		m.tileData = x & 0x10 != 0
+		m.bgMap = x & 0x08 != 0
+		m.spriteSize = x & 0x04 != 0
+		m.spriteEnable = x & 0x02 != 0
+		m.bgEnable = x & 0x01 != 0
+	case portSTAT:
+		m.lycInterrupt = x & 0x40 != 0
+		m.oamInterrupt = x & 0x20 != 0
+		m.vblankInterrupt = x & 0x10 != 0
+		m.hblankInterrupt = x & 0x08 != 0
+		m.lcdMode = x & 0x03
+	case portBGP:
+		m.bgp[0] = x & 3
+		m.bgp[1] = (x >> 2) & 3
+		m.bgp[2] = (x >> 4) & 3
+		m.bgp[3] = (x >> 6)
+	case portOBP0:
+		m.obp[0][0] = x & 3
+		m.obp[0][1] = (x >> 2) & 3
+		m.obp[0][2] = (x >> 4) & 3
+		m.obp[0][3] = x >> 6
+	case portOBP1:
+		m.obp[1][0] = x & 3
+		m.obp[1][1] = (x >> 2) & 3
+		m.obp[1][2] = (x >> 4) & 3
+		m.obp[1][3] = x >> 6
+	case portDMA:
 		src := uint16(x) << 8
-		mbc.dma(src)
+		m.dma(src)
 	}
-	mbc.hram[addr - 0xFF00] = x
+	m.hram[addr - 0xFF00] = x
 }
 
-func (mbc *MBC) UpdateTimers(t int) {
-	mbc.divTicks += t
-	if mbc.divTicks > divOverflow {
-		d := mbc.divTicks / divOverflow
-		mbc.hram[0x04] += byte(d)
-		mbc.divTicks -= d * divOverflow
+func (m *memory) updateTimers(t int) {
+	m.divTicks += t
+	if m.divTicks > divOverflow {
+		d := m.divTicks / divOverflow
+		m.hram[0x04] += byte(d)
+		m.divTicks -= d * divOverflow
 	}
-	if mbc.hram[0x07] & 4 == 0 { return }
-	mbc.timaTicks += t
-	if mbc.timaTicks > mbc.timaOverflow {
-		d := mbc.timaTicks / mbc.timaOverflow
-		x := int(mbc.hram[0x05]) + d
+	if m.hram[0x07] & 4 == 0 { return }
+	m.timaTicks += t
+	if m.timaTicks > m.timaOverflow {
+		d := m.timaTicks / m.timaOverflow
+		x := int(m.hram[0x05]) + d
 		if x > 0xFF {
-			mbc.hram[0x05] = mbc.hram[0x06] + byte(x)
-			mbc.hram[0x0F] |= 0x04
+			m.hram[0x05] = m.hram[0x06] + byte(x)
+			m.hram[0x0F] |= 0x04
 		} else {
-			mbc.hram[0x05] = byte(x)
+			m.hram[0x05] = byte(x)
 		}
-		mbc.timaTicks -= d * mbc.timaOverflow
+		m.timaTicks -= d * m.timaOverflow
 	}
 }
 
-func (mbc *MBC) dma(src uint16) {
+func (m *memory) dma(src uint16) {
 	for i := 0; i < 0xA0; i++ {
-		mbc.oam[i] = mbc.ReadByte(src)
+		m.oam[i] = m.readByte(src)
 		src++
 	}
 }
 
-func (mbc *MBC) PumpEvents() {
+func (m *memory) pumpEvents() {
 	var ev sdl.Event
 	for ev.Poll() {
 		// TODO trigger interrupts
@@ -403,26 +389,26 @@ func (mbc *MBC) PumpEvents() {
 		case sdl.KEYUP:
 			kev := ev.Keyboard()
 			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:   mbc.dpadBits |= 0x08
-			case sdl.K_UP:     mbc.dpadBits |= 0x04
-			case sdl.K_LEFT:   mbc.dpadBits |= 0x02
-			case sdl.K_RIGHT:  mbc.dpadBits |= 0x01
-			case sdl.K_RETURN: mbc.btnBits  |= 0x08
-			case sdl.K_RSHIFT: mbc.btnBits  |= 0x04
-			case sdl.K_z:      mbc.btnBits  |= 0x02
-			case sdl.K_x:      mbc.btnBits  |= 0x01
+			case sdl.K_DOWN:   m.dpadBits |= 0x08
+			case sdl.K_UP:     m.dpadBits |= 0x04
+			case sdl.K_LEFT:   m.dpadBits |= 0x02
+			case sdl.K_RIGHT:  m.dpadBits |= 0x01
+			case sdl.K_RETURN: m.btnBits  |= 0x08
+			case sdl.K_RSHIFT: m.btnBits  |= 0x04
+			case sdl.K_z:      m.btnBits  |= 0x02
+			case sdl.K_x:      m.btnBits  |= 0x01
 			}
 		case sdl.KEYDOWN:
 			kev := ev.Keyboard()
 			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:   mbc.dpadBits &^= 0x08
-			case sdl.K_UP:     mbc.dpadBits &^= 0x04
-			case sdl.K_LEFT:   mbc.dpadBits &^= 0x02
-			case sdl.K_RIGHT:  mbc.dpadBits &^= 0x01
-			case sdl.K_RETURN: mbc.btnBits  &^= 0x08
-			case sdl.K_RSHIFT: mbc.btnBits  &^= 0x04
-			case sdl.K_z:      mbc.btnBits  &^= 0x02
-			case sdl.K_x:      mbc.btnBits  &^= 0x01
+			case sdl.K_DOWN:   m.dpadBits &^= 0x08
+			case sdl.K_UP:     m.dpadBits &^= 0x04
+			case sdl.K_LEFT:   m.dpadBits &^= 0x02
+			case sdl.K_RIGHT:  m.dpadBits &^= 0x01
+			case sdl.K_RETURN: m.btnBits  &^= 0x08
+			case sdl.K_RSHIFT: m.btnBits  &^= 0x04
+			case sdl.K_z:      m.btnBits  &^= 0x02
+			case sdl.K_x:      m.btnBits  &^= 0x01
 			}
 		}
 	}
