@@ -46,6 +46,7 @@ func run(mbc *MBC, cpu *CPU, gpu *GPU) {
 	for {
 		if sig, ok := <-signal.Incoming; ok {
 			fmt.Printf("\rReceived %v, cleaning up\n", sig)
+			//Dump(os.Stderr, mbc, cpu)
 			break
 		}
 		var s int
@@ -64,5 +65,6 @@ func Dump(w io.Writer, mbc *MBC, cpu *CPU) {
 		"CPU STATE\n" +
 		"%v\n\n",
 		cpu.PC, mbc.Disasm(cpu.PC), cpu)
+	cpu.DumpStack(w)
 	mbc.Dump(w)
 }

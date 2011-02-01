@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 )
 
 type CPU struct {
@@ -11,6 +12,7 @@ type CPU struct {
 	ime, halt, pause bool
 	mmu *MBC
 	PC uint16
+	stack uint16
 }
 
 func NewCPU(mmu *MBC) *CPU {
@@ -19,7 +21,7 @@ func NewCPU(mmu *MBC) *CPU {
 		fz: true, fn: false, fh: true, fc: true,
 		ime: true, halt: false, pause: true,
 		mmu: mmu,
-		PC: 0x0100 }
+		PC: 0x0100, stack: 0xFFFE }
 }
 
 func (cpu *CPU) String() string {
@@ -72,6 +74,33 @@ func (cpu *CPU) irq(mask, f byte) int {
 	}
 	cpu.mmu.WritePort(PortIF, f)
 	return 32/4
+}
+
+func (cpu *CPU) DumpStack(w io.Writer) {
+	addr := cpu.stack-2
+	read := func() (x uint16, e interface{}) {
+		defer func() {
+			addr -= 2
+			e = recover()
+		}()
+		return cpu.mmu.ReadWord(addr), e
+	}
+	fmt.Fprintln(w, "STACK ┬")
+	for addr >= cpu.sp {
+		if addr == cpu.sp {
+			fmt.Fprintf(w, "   SP ╰→ ")
+		} else {
+			fmt.Fprintf(w, "      │  ")
+		}
+		fmt.Fprintf(w, "%04X ", addr)
+		x, e := read()
+		if e != nil {
+			fmt.Fprintln(w, "(read failed!)")
+		} else {
+			fmt.Fprintf(w, "%04Xh\n", x)
+		}
+	}
+	fmt.Fprintln(w)
 }
 
 func (mmu *MBC) Disasm(addr uint16) (result string) {
@@ -509,6 +538,7 @@ func (cpu *CPU) fdx() int {
 		return cpu.jr(!cpu.fc)
 	case 0x31:		// LD SP,d16
 		cpu.sp = cpu.fetchWord()
+		cpu.stack = cpu.sp
 		return 12/4
 	case 0x32:		// LD (HL-),A
 		cpu.mmu.WriteByte(cpu.hl, cpu.a)
