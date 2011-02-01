@@ -24,16 +24,16 @@ func Start(path string) (ch chan int, error interface{}) {
 	gpu := NewGPU(mbc)
 
 	ch = make(chan int)
-	go run(ch, mbc, cpu, gpu)
+	go run(ch, cpu, gpu)
 	return ch, nil
 }
 
-func run(quit chan int, mbc *MBC, cpu *CPU, gpu *GPU) {
+func run(quit chan int, cpu *CPU, gpu *GPU) {
 	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Fprintf(os.Stderr, "panic: %v\n\n", e)
-			Dump(os.Stderr, mbc, cpu)
+			Dump(os.Stderr, cpu)
 			fmt.Fprint(os.Stderr, "RUNTIME TRACE\n\n")
 			panic(e)
 		}
@@ -51,18 +51,18 @@ func run(quit chan int, mbc *MBC, cpu *CPU, gpu *GPU) {
 		t += s
 	}
 	fmt.Printf("total ticks: %d\n", t)
-	fmt.Printf("%v\n%v\n", cpu, cpu.mmu)
+	fmt.Printf("%v\n%v\n", cpu, cpu.MBC)
 
 	quit <- 0
 }
 
-func Dump(w io.Writer, mbc *MBC, cpu *CPU) {
+func Dump(w io.Writer, cpu *CPU) {
 	fmt.Fprintf(w,
 		"LAST INSTRUCTION\n" +
 		"%04X\t%s\n\n" +
 		"CPU STATE\n" +
 		"%v\n\n",
-		cpu.PC, mbc.Disasm(cpu.PC), cpu)
+		cpu.PC, cpu.Disasm(cpu.PC), cpu)
 	cpu.DumpStack(w)
-	mbc.Dump(w)
+	cpu.MBC.Dump(w)
 }

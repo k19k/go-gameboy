@@ -6,21 +6,21 @@ import (
 )
 
 type CPU struct {
+	*MBC
 	a, b, c, d, e byte
 	hl, pc, sp uint16
 	fz, fn, fh, fc bool
 	ime, halt, pause bool
-	mmu MemoryUnit
 	PC uint16
 	stack uint16
 }
 
-func NewCPU(mmu MemoryUnit) *CPU {
-	return &CPU { a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
+func NewCPU(mmu *MBC) *CPU {
+	return &CPU { MBC: mmu,
+	        a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
 		hl: 0x014D, pc: 0x0100, sp: 0xFFFE,
 		fz: true, fn: false, fh: true, fc: true,
 		ime: true, halt: false, pause: true,
-		mmu: mmu,
 		PC: 0x0100, stack: 0xFFFE }
 }
 
@@ -37,18 +37,18 @@ func (cpu *CPU) Step() int {
 	t := 4
 	if !cpu.halt {
 		cpu.PC = cpu.pc
-		//fmt.Printf("%04X %s\n", cpu.pc, cpu.mmu.Disasm(cpu.pc))
+		//fmt.Printf("%04X %s\n", cpu.pc, cpu.Disasm(cpu.pc))
 		t = cpu.fdx()
 	}
 	if cpu.ime {
-		f := cpu.mmu.ReadPort(PortIF)
-		e := cpu.mmu.ReadPort(PortIE)
+		f := cpu.ReadPort(PortIF)
+		e := cpu.ReadPort(PortIE)
 		mask := f & e & 0x1F
 		if mask != 0 {
 			t += cpu.irq(mask, f)
 		}
 	}
-	cpu.mmu.UpdateTimers(t)
+	cpu.UpdateTimers(t)
 	return t
 }
 
@@ -72,7 +72,7 @@ func (cpu *CPU) irq(mask, f byte) int {
 		cpu.pc = JoypadAddr
 		f &^= 0x10
 	}
-	cpu.mmu.WritePort(PortIF, f)
+	cpu.WritePort(PortIF, f)
 	return 32/4
 }
 
@@ -83,7 +83,7 @@ func (cpu *CPU) DumpStack(w io.Writer) {
 			addr -= 2
 			e = recover()
 		}()
-		return cpu.mmu.ReadWord(addr), e
+		return cpu.ReadWord(addr), e
 	}
 	fmt.Fprintln(w, "STACK ┬")
 	for addr >= cpu.sp {
@@ -389,7 +389,7 @@ func (cpu *CPU) fdx() int {
 		cpu.wbc(cpu.fetchWord())
 		return 12/4
 	case 0x02:		// LD (BC),A
-		cpu.mmu.WriteByte(cpu.bc(), cpu.a)
+		cpu.WriteByte(cpu.bc(), cpu.a)
 		return 8/4
 	case 0x03:		// INC BC
 		cpu.wbc(cpu.bc() + 1)
@@ -407,13 +407,13 @@ func (cpu *CPU) fdx() int {
 		cpu.a = cpu.rlc(cpu.a)
 		return 4/4
 	case 0x08:		// LD (a16),SP
-		cpu.mmu.WriteWord(cpu.fetchWord(), cpu.sp)
+		cpu.WriteWord(cpu.fetchWord(), cpu.sp)
 		return 20/4
 	case 0x09:		// ADD HL,BC
 		cpu.hl = cpu.add16(cpu.hl, cpu.bc())
 		return 8/4
 	case 0x0A:		// LD A,(BC)
-		cpu.a = cpu.mmu.ReadByte(cpu.bc())
+		cpu.a = cpu.ReadByte(cpu.bc())
 		return 8/4
 	case 0x0B:		// DEC BC
 		cpu.wbc(cpu.bc() - 1)
@@ -438,7 +438,7 @@ func (cpu *CPU) fdx() int {
 		cpu.wde(cpu.fetchWord())
 		return 12/4
 	case 0x12:		// LD (DE),A
-		cpu.mmu.WriteByte(cpu.de(), cpu.a)
+		cpu.WriteByte(cpu.de(), cpu.a)
 		return 8/4
 	case 0x13:		// INC DE
 		cpu.wde(cpu.de() + 1)
@@ -461,7 +461,7 @@ func (cpu *CPU) fdx() int {
 		cpu.hl = cpu.add16(cpu.hl, cpu.de())
 		return 8/4
 	case 0x1A:		// LD A,(DE)
-		cpu.a = cpu.mmu.ReadByte(cpu.de())
+		cpu.a = cpu.ReadByte(cpu.de())
 		return 8/4
 	case 0x1B:		// DEC DE
 		cpu.wde(cpu.de() - 1)
@@ -485,7 +485,7 @@ func (cpu *CPU) fdx() int {
 		cpu.hl = cpu.fetchWord()
 		return 12/4
 	case 0x22:		// LD (HL+),A
-		cpu.mmu.WriteByte(cpu.hl, cpu.a)
+		cpu.WriteByte(cpu.hl, cpu.a)
 		cpu.hl++
 		return 8/4
 	case 0x23:		// INC HL
@@ -513,7 +513,7 @@ func (cpu *CPU) fdx() int {
 		cpu.hl = cpu.add16(cpu.hl, cpu.hl)
 		return 8/4
 	case 0x2A:		// LD A,(HL+)
-		cpu.a = cpu.mmu.ReadByte(cpu.hl)
+		cpu.a = cpu.ReadByte(cpu.hl)
 		cpu.hl++
 		return 8/4
 	case 0x2B:		// DEC HL
@@ -541,22 +541,22 @@ func (cpu *CPU) fdx() int {
 		cpu.stack = cpu.sp
 		return 12/4
 	case 0x32:		// LD (HL-),A
-		cpu.mmu.WriteByte(cpu.hl, cpu.a)
+		cpu.WriteByte(cpu.hl, cpu.a)
 		cpu.hl--
 		return 8/4
 	case 0x33:		// INC SP
 		cpu.sp++
 		return 8/4
 	case 0x34:		// INC (HL)
-		x := cpu.mmu.ReadByte(cpu.hl)
-		cpu.mmu.WriteByte(cpu.hl, cpu.inc(x))
+		x := cpu.ReadByte(cpu.hl)
+		cpu.WriteByte(cpu.hl, cpu.inc(x))
 		return 12/4
 	case 0x35:		// DEC (HL)
-		x := cpu.mmu.ReadByte(cpu.hl)
-		cpu.mmu.WriteByte(cpu.hl, cpu.dec(x))
+		x := cpu.ReadByte(cpu.hl)
+		cpu.WriteByte(cpu.hl, cpu.dec(x))
 		return 12/4
 	case 0x36:		// LD (HL),d8
-		cpu.mmu.WriteByte(cpu.hl, cpu.fetchByte())
+		cpu.WriteByte(cpu.hl, cpu.fetchByte())
 		return 12/4
 	case 0x37:		// SCF
 		cpu.fn = false
@@ -569,7 +569,7 @@ func (cpu *CPU) fdx() int {
 		cpu.hl = cpu.add16(cpu.hl, cpu.sp)
 		return 8/4
 	case 0x3A:		// LD A,(HL-)
-		cpu.a = cpu.mmu.ReadByte(cpu.hl)
+		cpu.a = cpu.ReadByte(cpu.hl)
 		cpu.hl--
 		return 8/4
 	case 0x3B:		// DEC SP
@@ -598,7 +598,7 @@ func (cpu *CPU) fdx() int {
 	case 0x43: cpu.b = cpu.e; return 1
 	case 0x44: cpu.b = cpu.h(); return 1
 	case 0x45: cpu.b = cpu.l(); return 1
-	case 0x46: cpu.b = cpu.mmu.ReadByte(cpu.hl); return 2
+	case 0x46: cpu.b = cpu.ReadByte(cpu.hl); return 2
 	case 0x47: cpu.b = cpu.a; return 1
 
 	case 0x48: cpu.c = cpu.b; return 1
@@ -607,7 +607,7 @@ func (cpu *CPU) fdx() int {
 	case 0x4B: cpu.c = cpu.e; return 1
 	case 0x4C: cpu.c = cpu.h(); return 1
 	case 0x4D: cpu.c = cpu.l(); return 1
-	case 0x4E: cpu.c = cpu.mmu.ReadByte(cpu.hl); return 2
+	case 0x4E: cpu.c = cpu.ReadByte(cpu.hl); return 2
 	case 0x4F: cpu.c = cpu.a; return 1
 
 	case 0x50: cpu.d = cpu.b; return 1
@@ -616,7 +616,7 @@ func (cpu *CPU) fdx() int {
 	case 0x53: cpu.d = cpu.e; return 1
 	case 0x54: cpu.d = cpu.h(); return 1
 	case 0x55: cpu.d = cpu.l(); return 1
-	case 0x56: cpu.d = cpu.mmu.ReadByte(cpu.hl); return 2
+	case 0x56: cpu.d = cpu.ReadByte(cpu.hl); return 2
 	case 0x57: cpu.d = cpu.a; return 1
 
 	case 0x58: cpu.e = cpu.b; return 1
@@ -625,7 +625,7 @@ func (cpu *CPU) fdx() int {
 	case 0x5B: return 1
 	case 0x5C: cpu.e = cpu.h(); return 1
 	case 0x5D: cpu.e = cpu.l(); return 1
-	case 0x5E: cpu.e = cpu.mmu.ReadByte(cpu.hl); return 2
+	case 0x5E: cpu.e = cpu.ReadByte(cpu.hl); return 2
 	case 0x5F: cpu.e = cpu.a; return 1
 
 	case 0x60: cpu.wh(cpu.b); return 1
@@ -634,7 +634,7 @@ func (cpu *CPU) fdx() int {
 	case 0x63: cpu.wh(cpu.e); return 1
 	case 0x64: return 1
 	case 0x65: cpu.wh(cpu.l()); return 1
-	case 0x66: cpu.wh(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x66: cpu.wh(cpu.ReadByte(cpu.hl)); return 2
 	case 0x67: cpu.wh(cpu.a); return 1
 
 	case 0x68: cpu.wl(cpu.b); return 1
@@ -643,17 +643,17 @@ func (cpu *CPU) fdx() int {
 	case 0x6B: cpu.wl(cpu.e); return 1
 	case 0x6C: cpu.wl(cpu.h()); return 1
 	case 0x6D: return 1
-	case 0x6E: cpu.wl(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x6E: cpu.wl(cpu.ReadByte(cpu.hl)); return 2
 	case 0x6F: cpu.wl(cpu.a); return 1
 
-	case 0x70: cpu.mmu.WriteByte(cpu.hl, cpu.b); return 2
-	case 0x71: cpu.mmu.WriteByte(cpu.hl, cpu.c); return 2
-	case 0x72: cpu.mmu.WriteByte(cpu.hl, cpu.d); return 2
-	case 0x73: cpu.mmu.WriteByte(cpu.hl, cpu.e); return 2
-	case 0x74: cpu.mmu.WriteByte(cpu.hl, cpu.h()); return 2
-	case 0x75: cpu.mmu.WriteByte(cpu.hl, cpu.l()); return 2
+	case 0x70: cpu.WriteByte(cpu.hl, cpu.b); return 2
+	case 0x71: cpu.WriteByte(cpu.hl, cpu.c); return 2
+	case 0x72: cpu.WriteByte(cpu.hl, cpu.d); return 2
+	case 0x73: cpu.WriteByte(cpu.hl, cpu.e); return 2
+	case 0x74: cpu.WriteByte(cpu.hl, cpu.h()); return 2
+	case 0x75: cpu.WriteByte(cpu.hl, cpu.l()); return 2
 	case 0x76: cpu.halt = true; return 1
-	case 0x77: cpu.mmu.WriteByte(cpu.hl, cpu.a); return 2
+	case 0x77: cpu.WriteByte(cpu.hl, cpu.a); return 2
 
 	case 0x78: cpu.a = cpu.b; return 1
 	case 0x79: cpu.a = cpu.c; return 1
@@ -661,7 +661,7 @@ func (cpu *CPU) fdx() int {
 	case 0x7B: cpu.a = cpu.e; return 1
 	case 0x7C: cpu.a = cpu.h(); return 1
 	case 0x7D: cpu.a = cpu.l(); return 1
-	case 0x7E: cpu.a = cpu.mmu.ReadByte(cpu.hl); return 2
+	case 0x7E: cpu.a = cpu.ReadByte(cpu.hl); return 2
 	case 0x7F: return 1
 
 	// Math Instructions /////////////////////////////////////////
@@ -672,7 +672,7 @@ func (cpu *CPU) fdx() int {
 	case 0x83: cpu.add(cpu.e); return 1
 	case 0x84: cpu.add(cpu.h()); return 1
 	case 0x85: cpu.add(cpu.l()); return 1
-	case 0x86: cpu.add(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x86: cpu.add(cpu.ReadByte(cpu.hl)); return 2
 	case 0x87: cpu.add(cpu.a); return 1
 
 	case 0x88: cpu.adc(cpu.b); return 1
@@ -681,7 +681,7 @@ func (cpu *CPU) fdx() int {
 	case 0x8B: cpu.adc(cpu.e); return 1
 	case 0x8C: cpu.adc(cpu.h()); return 1
 	case 0x8D: cpu.adc(cpu.l()); return 1
-	case 0x8E: cpu.adc(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x8E: cpu.adc(cpu.ReadByte(cpu.hl)); return 2
 	case 0x8F: cpu.adc(cpu.a); return 1
 
 	case 0x90: cpu.sub(cpu.b); return 1
@@ -690,7 +690,7 @@ func (cpu *CPU) fdx() int {
 	case 0x93: cpu.sub(cpu.e); return 1
 	case 0x94: cpu.sub(cpu.h()); return 1
 	case 0x95: cpu.sub(cpu.l()); return 1
-	case 0x96: cpu.sub(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x96: cpu.sub(cpu.ReadByte(cpu.hl)); return 2
 	case 0x97: cpu.sub(cpu.a); return 1
 
 	case 0x98: cpu.sbc(cpu.b); return 1
@@ -699,7 +699,7 @@ func (cpu *CPU) fdx() int {
 	case 0x9B: cpu.sbc(cpu.e); return 1
 	case 0x9C: cpu.sbc(cpu.h()); return 1
 	case 0x9D: cpu.sbc(cpu.l()); return 1
-	case 0x9E: cpu.sbc(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0x9E: cpu.sbc(cpu.ReadByte(cpu.hl)); return 2
 	case 0x9F: cpu.sbc(cpu.a); return 1
 
 	case 0xA0: cpu.and(cpu.b); return 1
@@ -708,7 +708,7 @@ func (cpu *CPU) fdx() int {
 	case 0xA3: cpu.and(cpu.e); return 1
 	case 0xA4: cpu.and(cpu.h()); return 1
 	case 0xA5: cpu.and(cpu.l()); return 1
-	case 0xA6: cpu.and(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0xA6: cpu.and(cpu.ReadByte(cpu.hl)); return 2
 	case 0xA7: cpu.and(cpu.a); return 1
 
 	case 0xA8: cpu.xor(cpu.b); return 1
@@ -717,7 +717,7 @@ func (cpu *CPU) fdx() int {
 	case 0xAB: cpu.xor(cpu.e); return 1
 	case 0xAC: cpu.xor(cpu.h()); return 1
 	case 0xAD: cpu.xor(cpu.l()); return 1
-	case 0xAE: cpu.xor(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0xAE: cpu.xor(cpu.ReadByte(cpu.hl)); return 2
 	case 0xAF: cpu.xor(cpu.a); return 1
 
 	case 0xB0: cpu.or(cpu.b); return 1
@@ -726,7 +726,7 @@ func (cpu *CPU) fdx() int {
 	case 0xB3: cpu.or(cpu.e); return 1
 	case 0xB4: cpu.or(cpu.h()); return 1
 	case 0xB5: cpu.or(cpu.l()); return 1
-	case 0xB6: cpu.or(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0xB6: cpu.or(cpu.ReadByte(cpu.hl)); return 2
 	case 0xB7: cpu.or(cpu.a); return 1
 
 	case 0xB8: cpu.cp(cpu.b); return 1
@@ -735,7 +735,7 @@ func (cpu *CPU) fdx() int {
 	case 0xBB: cpu.cp(cpu.e); return 1
 	case 0xBC: cpu.cp(cpu.h()); return 1
 	case 0xBD: cpu.cp(cpu.l()); return 1
-	case 0xBE: cpu.cp(cpu.mmu.ReadByte(cpu.hl)); return 2
+	case 0xBE: cpu.cp(cpu.ReadByte(cpu.hl)); return 2
 	case 0xBF: cpu.cp(cpu.a); return 1
 
 	// Misc Instructions /////////////////////////////////////////
@@ -816,14 +816,14 @@ func (cpu *CPU) fdx() int {
 
 	case 0xE0:		// LDH (a8),A
 		addr := 0xFF00 + uint16(cpu.fetchByte())
-		cpu.mmu.WritePort(addr, cpu.a)
+		cpu.WritePort(addr, cpu.a)
 		return 12/4
 	case 0xE1:		// POP HL
 		cpu.hl = cpu.pop()
 		return 12/4
 	case 0xE2:		// LD (C),A
 		addr := 0xFF00 + uint16(cpu.c)
-		cpu.mmu.WritePort(addr, cpu.a)
+		cpu.WritePort(addr, cpu.a)
 		return 8/4
 	case 0xE3: panic("cpu: invalid opcode 0xE3")
 	case 0xE4: panic("cpu: invalid opcode 0xE4")
@@ -843,7 +843,7 @@ func (cpu *CPU) fdx() int {
 		cpu.pc = cpu.hl
 		return 4/4
 	case 0xEA:		// LD (a16),A
-		cpu.mmu.WriteByte(cpu.fetchWord(), cpu.a)
+		cpu.WriteByte(cpu.fetchWord(), cpu.a)
 		return 16/4
 	case 0xEB: panic("cpu: invalid opcode 0xEB")
 	case 0xEC: panic("cpu: invalid opcode 0xEC")
@@ -856,14 +856,14 @@ func (cpu *CPU) fdx() int {
 
 	case 0xF0:		// LDH A,(a8)
 		addr := 0xFF00 + uint16(cpu.fetchByte())
-		cpu.a = cpu.mmu.ReadPort(addr)
+		cpu.a = cpu.ReadPort(addr)
 		return 12/4
 	case 0xF1:		// POP AF
 		cpu.waf(cpu.pop())
 		return 12/4
 	case 0xF2:		// LD A,(C)
 		addr := 0xFF00 + uint16(cpu.c)
-		cpu.a = cpu.mmu.ReadPort(addr)
+		cpu.a = cpu.ReadPort(addr)
 		return 8/4
 	case 0xF3:		// DI
 		cpu.ime = false
@@ -885,7 +885,7 @@ func (cpu *CPU) fdx() int {
 		cpu.sp = cpu.hl
 		return 8/4
 	case 0xFA:		// LD A,(a16)
-		cpu.a = cpu.mmu.ReadByte(cpu.fetchWord())
+		cpu.a = cpu.ReadByte(cpu.fetchWord())
 		return 16/4
 	case 0xFB:		// EI
 		cpu.ime = true
@@ -909,8 +909,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x03: cpu.e = cpu.rlc(cpu.e); return 2
 	case 0x04: cpu.wh(cpu.rlc(cpu.h())); return 2
 	case 0x05: cpu.wl(cpu.rlc(cpu.l())); return 2
-	case 0x06: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.rlc(x))
+	case 0x06: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.rlc(x))
 		   return 4
 	case 0x07: cpu.a = cpu.rlc(cpu.a); return 2
 
@@ -920,8 +920,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x0B: cpu.e = cpu.rrc(cpu.e); return 2
 	case 0x0C: cpu.wh(cpu.rrc(cpu.h())); return 2
 	case 0x0D: cpu.wl(cpu.rrc(cpu.l())); return 2
-	case 0x0E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.rrc(x))
+	case 0x0E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.rrc(x))
 		   return 4
 	case 0x0F: cpu.a = cpu.rrc(cpu.a); return 2
 
@@ -931,8 +931,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x13: cpu.e = cpu.rl(cpu.e); return 2
 	case 0x14: cpu.wh(cpu.rl(cpu.h())); return 2
 	case 0x15: cpu.wl(cpu.rl(cpu.l())); return 2
-	case 0x16: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.rl(x))
+	case 0x16: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.rl(x))
 		   return 4
 	case 0x17: cpu.a = cpu.rl(cpu.a); return 2
 
@@ -942,8 +942,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x1B: cpu.e = cpu.rr(cpu.e); return 2
 	case 0x1C: cpu.wh(cpu.rr(cpu.h())); return 2
 	case 0x1D: cpu.wl(cpu.rr(cpu.l())); return 2
-	case 0x1E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.rr(x))
+	case 0x1E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.rr(x))
 		   return 4
 	case 0x1F: cpu.a = cpu.rr(cpu.a); return 2
 
@@ -953,8 +953,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x23: cpu.e = cpu.sla(cpu.e); return 2
 	case 0x24: cpu.wh(cpu.sla(cpu.h())); return 2
 	case 0x25: cpu.wl(cpu.sla(cpu.l())); return 2
-	case 0x26: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.sla(x))
+	case 0x26: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.sla(x))
 		   return 4
 	case 0x27: cpu.a = cpu.sla(cpu.a); return 2
 
@@ -964,8 +964,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x2B: cpu.e = cpu.sra(cpu.e); return 2
 	case 0x2C: cpu.wh(cpu.sra(cpu.h())); return 2
 	case 0x2D: cpu.wl(cpu.sra(cpu.l())); return 2
-	case 0x2E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.sra(x))
+	case 0x2E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.sra(x))
 		   return 4
 	case 0x2F: cpu.a = cpu.sra(cpu.a); return 2
 
@@ -975,8 +975,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x33: cpu.e = cpu.swap(cpu.e); return 2
 	case 0x34: cpu.wh(cpu.swap(cpu.h())); return 2
 	case 0x35: cpu.wl(cpu.swap(cpu.l())); return 2
-	case 0x36: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.swap(x))
+	case 0x36: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.swap(x))
 		   return 4
 	case 0x37: cpu.a = cpu.swap(cpu.a); return 2
 
@@ -986,8 +986,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x3B: cpu.e = cpu.srl(cpu.e); return 2
 	case 0x3C: cpu.wh(cpu.srl(cpu.h())); return 2
 	case 0x3D: cpu.wl(cpu.srl(cpu.l())); return 2
-	case 0x3E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, cpu.srl(x))
+	case 0x3E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, cpu.srl(x))
 		   return 4
 	case 0x3F: cpu.a = cpu.srl(cpu.a); return 2
 
@@ -997,7 +997,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x43: cpu.bit(0, cpu.e); return 2
 	case 0x44: cpu.bit(0, cpu.h()); return 2
 	case 0x45: cpu.bit(0, cpu.l()); return 2
-	case 0x46: cpu.bit(0, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x46: cpu.bit(0, cpu.ReadByte(cpu.hl)); return 4
 	case 0x47: cpu.bit(0, cpu.a); return 2
 
 	case 0x48: cpu.bit(1, cpu.b); return 2
@@ -1006,7 +1006,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x4B: cpu.bit(1, cpu.e); return 2
 	case 0x4C: cpu.bit(1, cpu.h()); return 2
 	case 0x4D: cpu.bit(1, cpu.l()); return 2
-	case 0x4E: cpu.bit(1, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x4E: cpu.bit(1, cpu.ReadByte(cpu.hl)); return 4
 	case 0x4F: cpu.bit(1, cpu.a); return 2
 
 	case 0x50: cpu.bit(2, cpu.b); return 2
@@ -1015,7 +1015,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x53: cpu.bit(2, cpu.e); return 2
 	case 0x54: cpu.bit(2, cpu.h()); return 2
 	case 0x55: cpu.bit(2, cpu.l()); return 2
-	case 0x56: cpu.bit(2, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x56: cpu.bit(2, cpu.ReadByte(cpu.hl)); return 4
 	case 0x57: cpu.bit(2, cpu.a); return 2
 
 	case 0x58: cpu.bit(3, cpu.b); return 2
@@ -1024,7 +1024,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x5B: cpu.bit(3, cpu.e); return 2
 	case 0x5C: cpu.bit(3, cpu.h()); return 2
 	case 0x5D: cpu.bit(3, cpu.l()); return 2
-	case 0x5E: cpu.bit(3, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x5E: cpu.bit(3, cpu.ReadByte(cpu.hl)); return 4
 	case 0x5F: cpu.bit(3, cpu.a); return 2
 
 	case 0x60: cpu.bit(4, cpu.b); return 2
@@ -1033,7 +1033,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x63: cpu.bit(4, cpu.e); return 2
 	case 0x64: cpu.bit(4, cpu.h()); return 2
 	case 0x65: cpu.bit(4, cpu.l()); return 2
-	case 0x66: cpu.bit(4, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x66: cpu.bit(4, cpu.ReadByte(cpu.hl)); return 4
 	case 0x67: cpu.bit(4, cpu.a); return 2
 
 	case 0x68: cpu.bit(5, cpu.b); return 2
@@ -1042,7 +1042,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x6B: cpu.bit(5, cpu.e); return 2
 	case 0x6C: cpu.bit(5, cpu.h()); return 2
 	case 0x6D: cpu.bit(5, cpu.l()); return 2
-	case 0x6E: cpu.bit(5, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x6E: cpu.bit(5, cpu.ReadByte(cpu.hl)); return 4
 	case 0x6F: cpu.bit(5, cpu.a); return 2
 
 	case 0x70: cpu.bit(6, cpu.b); return 2
@@ -1051,7 +1051,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x73: cpu.bit(6, cpu.e); return 2
 	case 0x74: cpu.bit(6, cpu.h()); return 2
 	case 0x75: cpu.bit(6, cpu.l()); return 2
-	case 0x76: cpu.bit(6, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x76: cpu.bit(6, cpu.ReadByte(cpu.hl)); return 4
 	case 0x77: cpu.bit(6, cpu.a); return 2
 
 	case 0x78: cpu.bit(7, cpu.b); return 2
@@ -1060,7 +1060,7 @@ func (cpu *CPU) fdxCB() int {
 	case 0x7B: cpu.bit(7, cpu.e); return 2
 	case 0x7C: cpu.bit(7, cpu.h()); return 2
 	case 0x7D: cpu.bit(7, cpu.l()); return 2
-	case 0x7E: cpu.bit(7, cpu.mmu.ReadByte(cpu.hl)); return 4
+	case 0x7E: cpu.bit(7, cpu.ReadByte(cpu.hl)); return 4
 	case 0x7F: cpu.bit(7, cpu.a); return 2
 
 	case 0x80: cpu.b = res(0, cpu.b); return 2
@@ -1069,8 +1069,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x83: cpu.e = res(0, cpu.e); return 2
 	case 0x84: cpu.wh(res(0, cpu.h())); return 2
 	case 0x85: cpu.wl(res(0, cpu.l())); return 2
-	case 0x86: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(0, x))
+	case 0x86: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(0, x))
 		   return 4
 	case 0x87: cpu.a = res(0, cpu.a); return 2
 
@@ -1080,8 +1080,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x8B: cpu.e = res(1, cpu.e); return 2
 	case 0x8C: cpu.wh(res(1, cpu.h())); return 2
 	case 0x8D: cpu.wl(res(1, cpu.l())); return 2
-	case 0x8E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(1, x))
+	case 0x8E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(1, x))
 		   return 4
 	case 0x8F: cpu.a = res(1, cpu.a); return 2
 
@@ -1091,8 +1091,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x93: cpu.e = res(2, cpu.e); return 2
 	case 0x94: cpu.wh(res(2, cpu.h())); return 2
 	case 0x95: cpu.wl(res(2, cpu.l())); return 2
-	case 0x96: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(2, x))
+	case 0x96: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(2, x))
 		   return 4
 	case 0x97: cpu.a = res(2, cpu.a); return 2
 
@@ -1102,8 +1102,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0x9B: cpu.e = res(3, cpu.e); return 2
 	case 0x9C: cpu.wh(res(3, cpu.h())); return 2
 	case 0x9D: cpu.wl(res(3, cpu.l())); return 2
-	case 0x9E: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(3, x))
+	case 0x9E: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(3, x))
 		   return 4
 	case 0x9F: cpu.a = res(3, cpu.a); return 2
 
@@ -1113,8 +1113,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xA3: cpu.e = res(4, cpu.e); return 2
 	case 0xA4: cpu.wh(res(4, cpu.h())); return 2
 	case 0xA5: cpu.wl(res(4, cpu.l())); return 2
-	case 0xA6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(4, x))
+	case 0xA6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(4, x))
 		   return 4
 	case 0xA7: cpu.a = res(4, cpu.a); return 2
 
@@ -1124,8 +1124,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xAB: cpu.e = res(5, cpu.e); return 2
 	case 0xAC: cpu.wh(res(5, cpu.h())); return 2
 	case 0xAD: cpu.wl(res(5, cpu.l())); return 2
-	case 0xAE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(5, x))
+	case 0xAE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(5, x))
 		   return 4
 	case 0xAF: cpu.a = res(5, cpu.a); return 2
 
@@ -1135,8 +1135,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xB3: cpu.e = res(6, cpu.e); return 2
 	case 0xB4: cpu.wh(res(6, cpu.h())); return 2
 	case 0xB5: cpu.wl(res(6, cpu.l())); return 2
-	case 0xB6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(6, x))
+	case 0xB6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(6, x))
 		   return 4
 	case 0xB7: cpu.a = res(6, cpu.a); return 2
 
@@ -1146,8 +1146,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xBB: cpu.e = res(7, cpu.e); return 2
 	case 0xBC: cpu.wh(res(7, cpu.h())); return 2
 	case 0xBD: cpu.wl(res(7, cpu.l())); return 2
-	case 0xBE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, res(7, x))
+	case 0xBE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, res(7, x))
 		   return 4
 	case 0xBF: cpu.a = res(7, cpu.a); return 2
 
@@ -1157,8 +1157,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xC3: cpu.e = set(0, cpu.e); return 2
 	case 0xC4: cpu.wh(set(0, cpu.h())); return 2
 	case 0xC5: cpu.wl(set(0, cpu.l())); return 2
-	case 0xC6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(0, x))
+	case 0xC6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(0, x))
 		   return 4
 	case 0xC7: cpu.a = set(0, cpu.a); return 2
 
@@ -1168,8 +1168,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xCB: cpu.e = set(1, cpu.e); return 2
 	case 0xCC: cpu.wh(set(1, cpu.h())); return 2
 	case 0xCD: cpu.wl(set(1, cpu.l())); return 2
-	case 0xCE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(1, x))
+	case 0xCE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(1, x))
 		   return 4
 	case 0xCF: cpu.a = set(1, cpu.a); return 2
 
@@ -1179,8 +1179,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xD3: cpu.e = set(2, cpu.e); return 2
 	case 0xD4: cpu.wh(set(2, cpu.h())); return 2
 	case 0xD5: cpu.wl(set(2, cpu.l())); return 2
-	case 0xD6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(2, x))
+	case 0xD6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(2, x))
 		   return 4
 	case 0xD7: cpu.a = set(2, cpu.a); return 2
 
@@ -1190,8 +1190,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xDB: cpu.e = set(3, cpu.e); return 2
 	case 0xDC: cpu.wh(set(3, cpu.h())); return 2
 	case 0xDD: cpu.wl(set(3, cpu.l())); return 2
-	case 0xDE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(3, x))
+	case 0xDE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(3, x))
 		   return 4
 	case 0xDF: cpu.a = set(3, cpu.a); return 2
 
@@ -1201,8 +1201,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xE3: cpu.e = set(4, cpu.e); return 2
 	case 0xE4: cpu.wh(set(4, cpu.h())); return 2
 	case 0xE5: cpu.wl(set(4, cpu.l())); return 2
-	case 0xE6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(4, x))
+	case 0xE6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(4, x))
 		   return 4
 	case 0xE7: cpu.a = set(4, cpu.a); return 2
 
@@ -1212,8 +1212,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xEB: cpu.e = set(5, cpu.e); return 2
 	case 0xEC: cpu.wh(set(5, cpu.h())); return 2
 	case 0xED: cpu.wl(set(5, cpu.l())); return 2
-	case 0xEE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(5, x))
+	case 0xEE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(5, x))
 		   return 4
 	case 0xEF: cpu.a = set(5, cpu.a); return 2
 
@@ -1223,8 +1223,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xF3: cpu.e = set(6, cpu.e); return 2
 	case 0xF4: cpu.wh(set(6, cpu.h())); return 2
 	case 0xF5: cpu.wl(set(6, cpu.l())); return 2
-	case 0xF6: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(6, x))
+	case 0xF6: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(6, x))
 		   return 4
 	case 0xF7: cpu.a = set(6, cpu.a); return 2
 
@@ -1234,8 +1234,8 @@ func (cpu *CPU) fdxCB() int {
 	case 0xFB: cpu.e = set(7, cpu.e); return 2
 	case 0xFC: cpu.wh(set(7, cpu.h())); return 2
 	case 0xFD: cpu.wl(set(7, cpu.l())); return 2
-	case 0xFE: x := cpu.mmu.ReadByte(cpu.hl)
-		   cpu.mmu.WriteByte(cpu.hl, set(7, x))
+	case 0xFE: x := cpu.ReadByte(cpu.hl)
+		   cpu.WriteByte(cpu.hl, set(7, x))
 		   return 4
 	case 0xFF: cpu.a = set(7, cpu.a); return 2
 	}
@@ -1286,12 +1286,12 @@ func (cpu *CPU) rst(addr uint16) int {
 
 func (cpu *CPU) push(x uint16) {
 	cpu.sp -= 2
-	cpu.mmu.WriteWord(cpu.sp, x)
+	cpu.WriteWord(cpu.sp, x)
 	//fmt.Printf("-> SP=%04Xh *=%04Xh\n", cpu.sp, x)
 }
 
 func (cpu *CPU) pop() uint16 {
-	x := cpu.mmu.ReadWord(cpu.sp)
+	x := cpu.ReadWord(cpu.sp)
 	//fmt.Printf("<- SP=%04Xh *=%04Xh\n", cpu.sp, x)
 	cpu.sp += 2
 	return x
@@ -1579,11 +1579,11 @@ func (cpu *CPU) wl(x byte) {
 func (cpu *CPU) fetchByte() byte {
 	pc := cpu.pc
 	cpu.pc++
-	return cpu.mmu.ReadByte(pc)
+	return cpu.ReadByte(pc)
 }
 
 func (cpu *CPU) fetchWord() uint16 {
 	pc := cpu.pc
 	cpu.pc += 2
-	return cpu.mmu.ReadWord(pc)
+	return cpu.ReadWord(pc)
 }
