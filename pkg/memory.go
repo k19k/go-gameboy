@@ -105,54 +105,31 @@ type memory struct {
 	obp [2][4]byte
 }
 
-func (m *memory) dump(w io.Writer) {
-	var addr int
-
-	read := func () (x byte, e interface{}) {
-		defer func() {
-			e = recover()
-			addr++
-		}()
-		return m.readByte(uint16(addr)), e
-	}
-
-	fmt.Fprintf(w, "MEMORY DUMP ---- ROM BANK: %d -- ERAM BANK: %d\n",
-		m.romBank, m.eramBank)
-
-	for addr <= 0xFFFF {
-		fmt.Fprintf(w, "%04x  ", addr)
-		for x := 0; x < 8; x++ {
-			b, e := read()
-			if e == nil {
-				fmt.Fprintf(w, "%02x ", b)
-			} else {
-				fmt.Fprint(w, "?? ")
-			}
-		}
-		fmt.Fprint(w, " ")
-		for x := 0; x < 8; x++ {
-			b, e := read()
-			if e == nil {
-				fmt.Fprintf(w, "%02x ", b)
-			} else {
-				fmt.Fprint(w, "?? ")
-			}
-		}
-		addr -= 16
-		fmt.Fprint(w, " |")
-		for x := 0; x < 16; x++ {
-			b, e := read()
-			if e != nil {
-				fmt.Fprint(w, "?")
-			} else if b < 0x20 || b >= 0x7F {
-				fmt.Fprint(w, ".")
-			} else {
-				fmt.Fprintf(w, "%c", b)
-			}
-		}
-		fmt.Fprint(w, "\n")
-	}
-	fmt.Fprint(w, "\n")
+func newMemory(rom romImage) (m *memory, err interface{}) {
+	m = &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+	m.mbcType, err = rom.mbcType()
+	if err != nil { return }
+	m.writePort(portJOYP, 0x30)
+	m.writePort(portNR10, 0x80)
+	m.writePort(portNR11, 0xBF)
+	m.writePort(portNR12, 0xF3)
+	m.writePort(portNR14, 0xB4)
+	m.writePort(portNR21, 0x3F)
+	m.writePort(portNR24, 0xBF)
+	m.writePort(portNR30, 0x7F)
+	m.writePort(portNR31, 0xFF)
+	m.writePort(portNR32, 0x9F)
+	m.writePort(portNR33, 0xBF)
+	m.writePort(portNR41, 0xFF)
+	m.writePort(portNR44, 0xBF)
+	m.writePort(portNR50, 0x77)
+	m.writePort(portNR51, 0xF3)
+	m.writePort(portNR52, 0xF1)
+	m.writePort(portLCDC, 0x91)
+	m.writePort(portBGP,  0xFC)
+	m.writePort(portOBP0, 0xFF)
+	m.writePort(portOBP1, 0xFF)
+	return
 }
 
 func (m *memory) readByte(addr uint16) byte {
@@ -203,33 +180,6 @@ func (m *memory) readWord(addr uint16) uint16 {
 func (m *memory) writeWord(addr uint16, x uint16) {
 	m.writeByte(addr, uint8(x & 0xFF))
 	m.writeByte(addr+1, uint8(x >> 8))
-}
-
-func newMemory(rom romImage) (m *memory, err interface{}) {
-	m = &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
-	m.mbcType, err = rom.mbcType()
-	if err != nil { return }
-	m.writePort(portJOYP, 0x30)
-	m.writePort(portNR10, 0x80)
-	m.writePort(portNR11, 0xBF)
-	m.writePort(portNR12, 0xF3)
-	m.writePort(portNR14, 0xB4)
-	m.writePort(portNR21, 0x3F)
-	m.writePort(portNR24, 0xBF)
-	m.writePort(portNR30, 0x7F)
-	m.writePort(portNR31, 0xFF)
-	m.writePort(portNR32, 0x9F)
-	m.writePort(portNR33, 0xBF)
-	m.writePort(portNR41, 0xFF)
-	m.writePort(portNR44, 0xBF)
-	m.writePort(portNR50, 0x77)
-	m.writePort(portNR51, 0xF3)
-	m.writePort(portNR52, 0xF1)
-	m.writePort(portLCDC, 0x91)
-	m.writePort(portBGP,  0xFC)
-	m.writePort(portOBP0, 0xFF)
-	m.writePort(portOBP1, 0xFF)
-	return
 }
 
 func (m *memory) readROM(addr uint16) byte {
@@ -502,4 +452,54 @@ func (m *memory) load(dir string) interface{} {
 func (m *memory) saveName() string {
 	return fmt.Sprintf("%s-%02X-%04X.battery",
 		m.rom.title(), m.rom.headerChecksum(), m.rom.globalChecksum())
+}
+
+func (m *memory) dump(w io.Writer) {
+	var addr int
+
+	read := func () (x byte, e interface{}) {
+		defer func() {
+			e = recover()
+			addr++
+		}()
+		return m.readByte(uint16(addr)), e
+	}
+
+	fmt.Fprintf(w, "MEMORY DUMP ---- ROM BANK: %d -- ERAM BANK: %d\n",
+		m.romBank, m.eramBank)
+
+	for addr <= 0xFFFF {
+		fmt.Fprintf(w, "%04x  ", addr)
+		for x := 0; x < 8; x++ {
+			b, e := read()
+			if e == nil {
+				fmt.Fprintf(w, "%02x ", b)
+			} else {
+				fmt.Fprint(w, "?? ")
+			}
+		}
+		fmt.Fprint(w, " ")
+		for x := 0; x < 8; x++ {
+			b, e := read()
+			if e == nil {
+				fmt.Fprintf(w, "%02x ", b)
+			} else {
+				fmt.Fprint(w, "?? ")
+			}
+		}
+		addr -= 16
+		fmt.Fprint(w, " |")
+		for x := 0; x < 16; x++ {
+			b, e := read()
+			if e != nil {
+				fmt.Fprint(w, "?")
+			} else if b < 0x20 || b >= 0x7F {
+				fmt.Fprint(w, ".")
+			} else {
+				fmt.Fprintf(w, "%c", b)
+			}
+		}
+		fmt.Fprint(w, "\n")
+	}
+	fmt.Fprint(w, "\n")
 }
