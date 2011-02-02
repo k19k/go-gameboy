@@ -39,7 +39,6 @@ const (
 type display struct {
 	*memory
 	*sdl.Surface
-	clock int
 	pal []uint32
 	frameTime int64
 }
@@ -64,7 +63,7 @@ func (lcd *display) step(t int) {
 	}
 
 	ly := byte(lcd.clock / scanlineTicks)
-	lcd.writePort(portLY, ly)
+	lcd.hram[portLY - 0xFF00] = ly
 	mode := calcMode(lcd.clock, ly)
 	if mode == lcd.lcdMode {
 		return;

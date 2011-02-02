@@ -94,6 +94,9 @@ type memory struct {
 	lycInterrupt, oamInterrupt, vblankInterrupt, hblankInterrupt bool
 	lcdMode byte
 
+	// Counter used by the GPU
+	clock int
+
 	divTicks int
 	timaTicks int
 	timaOverflow int
@@ -286,6 +289,8 @@ func (m *memory) writePort(addr uint16, x byte) {
 		case 0x20: x |= m.dpadBits
 		case 0x30: x |= 0x0F
 		}
+	case portSC:
+		x = 0
 	case portDIV:
 		x = 0
 	case portTAC:
@@ -311,6 +316,9 @@ func (m *memory) writePort(addr uint16, x byte) {
 		m.vblankInterrupt = x & 0x10 != 0
 		m.hblankInterrupt = x & 0x08 != 0
 		m.lcdMode = x & 0x03
+	case portLY:
+		m.clock = 0
+		x = 0
 	case portBGP:
 		m.bgp[0] = x & 3
 		m.bgp[1] = (x >> 2) & 3
