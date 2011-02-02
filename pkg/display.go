@@ -158,7 +158,7 @@ func (lcd *display) scanline(ly byte) {
 			xflip := info & 0x20 == 0x20
 			palidx := (info >> 4) & 1
 			tiley := int(ly) - y
-			if yflip { tiley = h - tiley }
+			if yflip { tiley = h - 1 - tiley }
 			tile = tile * 16 + tiley * 2
 			rect := &sdl.Rect{Y:int16(ly)*scale, W:scale, H:scale}
 			for i := 0; i < 8; i++ {
