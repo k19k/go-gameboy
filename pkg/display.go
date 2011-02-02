@@ -38,6 +38,12 @@ type display struct {
 	frameTime int64
 	screenW   int
 	screenH   int
+
+	// When rendering a scanline this is zeroed out, then
+	// logical-ORed with the pixels from the BG and window.  This
+	// is then used to lookup which pixels can be painted in
+	// sprites that are to be obscured by the background layers.
+	oamLineMask [displayW]byte
 }
 
 func newDisplay(m *memory) *display {
@@ -119,6 +125,10 @@ func (lcd *display) delay() {
 }
 
 func (lcd *display) scanline() {
+	for i := 0; i < displayW; i++ {
+		lcd.oamLineMask[i] = 0
+	}
+
 	if lcd.bgEnable {
 		lcd.rleline(lcd.bgMap, byte(0), lcd.scx, lcd.scy)
 	}
@@ -148,6 +158,7 @@ func (lcd *display) rleline(map1 bool, x, xoff, yoff byte) {
 	cur := lcd.mapAt(map1, int(x+xoff), int(y))
 	for x++; x < displayW; x++ {
 		b := lcd.mapAt(map1, int(x+xoff), int(y))
+		lcd.oamLineMask[x] |= b
 		if b != cur {
 			lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
 			cur = b
@@ -191,7 +202,7 @@ func (lcd *display) oamline() {
 }
 
 func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
-	hidden := info&0x80 == 0x80
+	masked := info&0x80 == 0x80
 	yflip := info&0x40 == 0x40
 	xflip := info&0x20 == 0x20
 	palidx := (info >> 4) & 1
@@ -207,18 +218,14 @@ func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
 		W: uint16(scale), H: uint16(scale)}
 	for i := 0; i < 8; i++ {
 		xi := byte(x + i)
-		if xi > 248 { // xi < 0
-			continue
-		}
 		if xi >= displayW {
-			return
-		}
-		if hidden {
-			px := lcd.mapAt(lcd.bgMap,
-				int(xi+lcd.scx), int(lcd.ly+lcd.scy))
-			if px != 0 || xi > lcd.wx || lcd.ly >= lcd.wy {
+			if xi > 248 { // i.e., xi < 0
 				continue
 			}
+			return
+		}
+		if masked && lcd.oamLineMask[xi] != 0 {
+			continue
 		}
 		bit := uint(i)
 		if !xflip {
