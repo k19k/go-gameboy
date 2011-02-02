@@ -44,6 +44,7 @@ type display struct {
 }
 
 func newDisplay(m *memory) *display {
+	sdl.WM_SetCaption(m.rom.title(), "")
 	screen := sdl.SetVideoMode(screenW, screenH, 0, sdl.DOUBLEBUF)
 	pal := make([]uint32, 4)
 	pal[0] = sdl.MapRGBA(screen.Format, 0x9B, 0xBC, 0x0F, 0)
@@ -99,9 +100,6 @@ func (lcd *display) step(t int) {
 			irq |= 0x02
 		}
 		lcd.writePort(portIF, irq|0x01)
-		if !lcd.lcdEnable {
-			lcd.FillRect(nil, lcd.pal[0])
-		}
 		lcd.Flip()
 		lcd.delay()
 		lcd.pumpEvents()
