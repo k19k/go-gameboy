@@ -106,7 +106,7 @@ type memory struct {
 }
 
 func newMemory(rom romImage) (m *memory, err interface{}) {
-	m = &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+	m = &memory{rom: rom, romBank: 1, dpadBits: 0xF, btnBits: 0xF}
 	m.mbcType, err = rom.mbcType()
 	if err != nil { return }
 	m.writePort(portJOYP, 0x30)
@@ -499,7 +499,7 @@ func (m *memory) dump(w io.Writer) {
 				fmt.Fprintf(w, "%c", b)
 			}
 		}
-		fmt.Fprint(w, "\n")
+		fmt.Fprintln(w, "|")
 	}
-	fmt.Fprint(w, "\n")
+	fmt.Fprintln(w)
 }
