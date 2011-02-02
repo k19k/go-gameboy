@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"gameboy"
 	"os"
@@ -11,33 +12,37 @@ const (
 	dotCmdName = ".gogb"
 )
 
+var config gameboy.Config
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf("usage: %s rom\n", os.Args[0])
+	flag.Parse()
+	args := flag.Args()
+
+	if len(args) == 0 {
+		fmt.Printf("usage: %s [flags] rom\n", os.Args[0])
+		flag.PrintDefaults()
 		return
 	}
 
-	cfg := gameboy.Config{
-		SaveDir: ".",
-		Verbose: true,
-		Debug:   true}
-
-	home := os.Getenv("HOME")
-	if len(home) > 0 {
-		dir := path.Join(home, dotCmdName, "sav")
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
-		} else {
-			cfg.SaveDir = dir
-		}
+	if err := os.MkdirAll(config.SaveDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
+		return
 	}
 
 	quit := make(chan int)
-	err := gameboy.Start(os.Args[1], cfg, quit)
+	err := gameboy.Start(args[0], config, quit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
 		return
 	}
 
 	<-quit
+}
+
+func init() {
+	flag.StringVar(&config.SaveDir, "savedir",
+		path.Join(os.Getenv("HOME"), dotCmdName, "sav"),
+		"where to store save files")
+	flag.BoolVar(&config.Verbose, "v", false, "print verbose output")
+	flag.BoolVar(&config.Debug, "debug", false, "print debug messages")
 }
