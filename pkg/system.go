@@ -18,6 +18,10 @@ func Start(quit chan int, path string) (err interface{}) {
 	fmt.Printf("Header checksum: %t\n", rom.headerChecksum())
 	fmt.Printf("Global checksum: %t\n", rom.globalChecksum())
 
+	if mbc, e := rom.mbcType(); e == nil {
+		fmt.Printf("MBC: %d\n", mbc)
+	}
+
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {
 		err = sdl.GetError()
 		return
@@ -30,8 +34,10 @@ func Start(quit chan int, path string) (err interface{}) {
 	sys := newCPU(mem)
 	lcd := newDisplay(mem)
 
-	run(sys, lcd)
-	quit <- 1
+	go func() {
+		run(sys, lcd)
+		quit <- 1
+	}()
 	return
 }
 
@@ -49,7 +55,7 @@ func run(sys *cpu, lcd *display) {
 	t := 0
 	for {
 		if sig, ok := <-signal.Incoming; ok {
-			fmt.Printf("\rReceived %v, cleaning up\n", sig)
+			fmt.Printf("\nReceived %v, cleaning up\n", sig)
 			break
 		}
 		var s int
