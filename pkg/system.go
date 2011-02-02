@@ -3,37 +3,24 @@ package gameboy
 import (
 	"fmt"
 	"io"
-	"path"
 	"sdl"
 	"os"
 	"os/signal"
 )
 
-var dotCmdName = ".gogb"
-var saveDir = "."
-
-func init() {
-	home := os.Getenv("HOME")
-	if len(home) > 0 {
-		save := path.Join(home, dotCmdName, "sav")
-		if err := os.MkdirAll(save, 0755); err == nil {
-			saveDir = save
-		}
-	}
+type Config struct {
+	SaveDir string
+	Verbose bool
+	Debug bool
 }
 
-func Start(quit chan int, path string) (err interface{}) {
+func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	var rom romImage
 	rom, err = loadROM(path)
 	if err != nil { return }
 
-	fmt.Printf("Loaded ROM image '%s'\n", rom.title())
-	fmt.Printf("Logo match: %t\n", rom.checkLogo())
-	fmt.Printf("Header checksum: %t\n", rom.doHeaderChecksum())
-	fmt.Printf("Global checksum: %t\n", rom.doGlobalChecksum())
-
-	if mbc, e := rom.mbcType(); e == nil {
-		fmt.Printf("MBC: %d\n", mbc)
+	if cfg.Verbose {
+		rom.printInfo()
 	}
 
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {
@@ -45,7 +32,7 @@ func Start(quit chan int, path string) (err interface{}) {
 	mem, err = newMemory(rom)
 	if err != nil { return }
 
-	if e := mem.load(saveDir); e != nil {
+	if e := mem.load(cfg.SaveDir); e != nil {
 		fmt.Fprintf(os.Stderr, "load failed: %v\n", e)
 	}
 
@@ -53,8 +40,8 @@ func Start(quit chan int, path string) (err interface{}) {
 	lcd := newDisplay(mem)
 
 	go func() {
-		run(sys, lcd)
-		if e := mem.save(saveDir); e != nil {
+		run(&cfg, sys, lcd)
+		if e := mem.save(cfg.SaveDir); e != nil {
 			fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
 		}
 		quit <- 1
@@ -62,13 +49,15 @@ func Start(quit chan int, path string) (err interface{}) {
 	return
 }
 
-func run(sys *cpu, lcd *display) {
+func run(cfg *Config, sys *cpu, lcd *display) {
 	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Fprintf(os.Stderr, "panic: %v\n\n", e)
-			sys.dump(os.Stderr)
-			fmt.Fprint(os.Stderr, "RUNTIME TRACE\n\n")
+			if cfg.Debug {
+				fmt.Fprintf(os.Stderr, "panic: %v\n\n", e)
+				sys.dump(os.Stderr)
+				fmt.Fprint(os.Stderr, "RUNTIME TRACE\n\n")
+			}
 			panic(e)
 		}
 	}()
@@ -76,7 +65,9 @@ func run(sys *cpu, lcd *display) {
 	t := 0
 	for {
 		if sig, ok := <-signal.Incoming; ok {
-			fmt.Printf("\nReceived %v, cleaning up\n", sig)
+			if cfg.Verbose {
+				fmt.Printf("\nReceived %v, cleaning up\n", sig)
+			}
 			break
 		}
 		var s int
@@ -84,8 +75,21 @@ func run(sys *cpu, lcd *display) {
 		lcd.step(s)
 		t += s
 	}
-	fmt.Printf("total ticks: %d\n", t)
-	fmt.Printf("%v\n", sys)
+	if cfg.Debug {
+		fmt.Printf("total ticks: %d\n", t)
+		fmt.Printf("%v\n", sys)
+	}
+}
+
+func (rom romImage) printInfo() {
+	fmt.Printf("Loaded ROM image '%s'\n", rom.title())
+	fmt.Printf("Logo match: %t\n", rom.checkLogo())
+	fmt.Printf("Header checksum: %t\n", rom.doHeaderChecksum())
+	fmt.Printf("Global checksum: %t\n", rom.doGlobalChecksum())
+	fmt.Printf("ERAM: %d bytes\n", rom.ramSize())
+	if mbc, err := rom.mbcType(); err == nil {
+		fmt.Printf("MBC: %d\n", mbc)
+	}
 }
 
 func (sys *cpu) dump(w io.Writer) {
