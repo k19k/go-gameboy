@@ -373,18 +373,20 @@ func set(n, x byte) byte {
 // instruction set references.
 
 func (sys *cpu) daa() {
-	if sys.a&0x0F > 9 || sys.fh {
-		sys.a += 6
+	a := int(sys.a)
+	if a&0x0F > 9 || sys.fh {
+		a += 6
 		sys.fh = true
 	} else {
 		sys.fh = false
 	}
-	if sys.a > 0x9F || sys.fc {
-		sys.a += 0x60
+	if a > 0x9F || sys.fc {
+		a += 0x60
 		sys.fc = true
 	} else {
 		sys.fc = false
 	}
+	sys.a = byte(a)
 	sys.fz = sys.a == 0
 }
 
