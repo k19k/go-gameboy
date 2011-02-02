@@ -17,10 +17,10 @@ func main() {
 		return
 	}
 
-	cfg := gameboy.Config {
+	cfg := gameboy.Config{
 		SaveDir: ".",
 		Verbose: true,
-		Debug: true }
+		Debug:   true}
 
 	home := os.Getenv("HOME")
 	if len(home) > 0 {
@@ -35,7 +35,7 @@ func main() {
 	quit := make(chan int)
 	err := gameboy.Start(os.Args[1], cfg, quit)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err);
+		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
 		return
 	}
 

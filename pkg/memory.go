@@ -55,11 +55,11 @@ const (
 )
 
 const (
-	vblankAddr	= 0x0040
-	lcdStatusAddr	= 0x0048
-	timerAddr	= 0x0050
-	serialAddr	= 0x0058
-	joypadAddr	= 0x0060
+	vblankAddr    = 0x0040
+	lcdStatusAddr = 0x0048
+	timerAddr     = 0x0050
+	serialAddr    = 0x0058
+	joypadAddr    = 0x0060
 )
 
 const (
@@ -67,42 +67,45 @@ const (
 )
 
 type memory struct {
-	rom romImage
+	rom  romImage
 	vram [0x2000]byte
 	eram [0x8000]byte
 	wram [0x2000]byte
-	oam [0xA0]byte
+	oam  [0xA0]byte
 	hram [0x100]byte
 
-	romBank int
+	romBank  int
 	eramBank uint16
-	ramMode bool
+	ramMode  bool
 
 	mbcType int
 
 	// LCDC flags
-	lcdEnable bool
-	windowMap bool
+	lcdEnable    bool
+	windowMap    bool
 	windowEnable bool
-	tileData bool
-	bgMap bool
-	spriteSize bool
+	tileData     bool
+	bgMap        bool
+	spriteSize   bool
 	spriteEnable bool
-	bgEnable bool
+	bgEnable     bool
 
 	// STAT flags
-	lycInterrupt, oamInterrupt, vblankInterrupt, hblankInterrupt bool
-	lcdMode byte
+	lycInterrupt    bool
+	oamInterrupt    bool
+	vblankInterrupt bool
+	hblankInterrupt bool
+	lcdMode         byte
 
 	// Counter used by the GPU
 	clock int
 
-	divTicks int
-	timaTicks int
+	divTicks     int
+	timaTicks    int
 	timaOverflow int
 
 	dpadBits byte
-	btnBits byte
+	btnBits  byte
 
 	bgp [4]byte
 	obp [2][4]byte
@@ -111,7 +114,9 @@ type memory struct {
 func newMemory(rom romImage) (m *memory, err interface{}) {
 	m = &memory{rom: rom, romBank: 1, dpadBits: 0xF, btnBits: 0xF}
 	m.mbcType, err = rom.mbcType()
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	m.writePort(portJOYP, 0x30)
 	m.writePort(portNR10, 0x80)
 	m.writePort(portNR11, 0xBF)
@@ -129,7 +134,7 @@ func newMemory(rom romImage) (m *memory, err interface{}) {
 	m.writePort(portNR51, 0xF3)
 	m.writePort(portNR52, 0xF1)
 	m.writePort(portLCDC, 0x91)
-	m.writePort(portBGP,  0xFC)
+	m.writePort(portBGP, 0xFC)
 	m.writePort(portOBP0, 0xFF)
 	m.writePort(portOBP1, 0xFF)
 	return
@@ -166,7 +171,7 @@ func (m *memory) writeByte(addr uint16, x byte) {
 	case addr < 0xE000:
 		m.writeWorkRAM(addr, x)
 	case addr < 0xFE00:
-		m.writeWorkRAM(addr - 0x2000, x)
+		m.writeWorkRAM(addr-0x2000, x)
 	case addr < 0xFEA0:
 		m.writeOAM(addr, x)
 	case addr >= 0xFF00:
@@ -176,20 +181,20 @@ func (m *memory) writeByte(addr uint16, x byte) {
 
 func (m *memory) readWord(addr uint16) uint16 {
 	lo := uint16(m.readByte(addr))
-	hi := uint16(m.readByte(addr+1))
+	hi := uint16(m.readByte(addr + 1))
 	return (hi << 8) | lo
 }
 
 func (m *memory) writeWord(addr uint16, x uint16) {
-	m.writeByte(addr, uint8(x & 0xFF))
-	m.writeByte(addr+1, uint8(x >> 8))
+	m.writeByte(addr, uint8(x&0xFF))
+	m.writeByte(addr+1, uint8(x>>8))
 }
 
 func (m *memory) readROM(addr uint16) byte {
 	if addr < 0x4000 {
 		return m.rom[addr]
 	}
-	return m.rom[int(addr) - 0x4000 + m.romBank * 0x4000]
+	return m.rom[int(addr)-0x4000+m.romBank*0x4000]
 }
 
 func (m *memory) writeROM(addr uint16, x byte) {
@@ -197,7 +202,7 @@ func (m *memory) writeROM(addr uint16, x byte) {
 	case addr >= 0x6000:
 		switch m.mbcType {
 		case mbc1:
-			m.ramMode = x & 1 == 1
+			m.ramMode = x&1 == 1
 			if m.ramMode {
 				m.romBank &= 0x1F
 			} else {
@@ -226,57 +231,63 @@ func (m *memory) writeROM(addr uint16, x byte) {
 		switch m.mbcType {
 		case mbc1:
 			x &= 0x1F
-			if x == 0 { x++ }
+			if x == 0 {
+				x++
+			}
 			m.romBank &= 0x60
 			m.romBank |= int(x)
 		case mbc2:
-			if addr & 0x0100 != 0 {
+			if addr&0x0100 != 0 {
 				x &= 0x0F
-				if x == 0 { x++ }
+				if x == 0 {
+					x++
+				}
 				m.romBank = int(x)
 			}
 		case mbc3:
 			x &= 0x7F
-			if x == 0 { x++ }
+			if x == 0 {
+				x++
+			}
 			m.romBank = int(x)
 		}
 	}
 }
 
 func (m *memory) readVideoRAM(addr uint16) byte {
-	return m.vram[addr - 0x8000]
+	return m.vram[addr-0x8000]
 }
 
 func (m *memory) writeVideoRAM(addr uint16, x byte) {
-	m.vram[addr - 0x8000] = x
+	m.vram[addr-0x8000] = x
 }
 
 func (m *memory) readExternalRAM(addr uint16) byte {
-	return m.eram[addr - 0xA000 + m.eramBank * 0x2000]
+	return m.eram[addr-0xA000+m.eramBank*0x2000]
 }
 
 func (m *memory) writeExternalRAM(addr uint16, x byte) {
-	m.eram[addr - 0xA000 + m.eramBank * 0x2000] = x
+	m.eram[addr-0xA000+m.eramBank*0x2000] = x
 }
 
 func (m *memory) readWorkRAM(addr uint16) byte {
-	return m.wram[addr - 0xC000]
+	return m.wram[addr-0xC000]
 }
 
 func (m *memory) writeWorkRAM(addr uint16, x byte) {
-	m.wram[addr - 0xC000] = x
+	m.wram[addr-0xC000] = x
 }
 
 func (m *memory) readOAM(addr uint16) byte {
-	return m.oam[addr - 0xFE00]
+	return m.oam[addr-0xFE00]
 }
 
 func (m *memory) writeOAM(addr uint16, x byte) {
-	m.oam[addr - 0xFE00] = x
+	m.oam[addr-0xFE00] = x
 }
 
 func (m *memory) readPort(addr uint16) byte {
-	return m.hram[addr - 0xFF00]
+	return m.hram[addr-0xFF00]
 }
 
 func (m *memory) writePort(addr uint16, x byte) {
@@ -284,10 +295,14 @@ func (m *memory) writePort(addr uint16, x byte) {
 	case portJOYP:
 		x &= 0x30
 		switch x {
-		case 0x00: x |= 0x0F
-		case 0x10: x |= m.btnBits
-		case 0x20: x |= m.dpadBits
-		case 0x30: x |= 0x0F
+		case 0x00:
+			x |= 0x0F
+		case 0x10:
+			x |= m.btnBits
+		case 0x20:
+			x |= m.dpadBits
+		case 0x30:
+			x |= 0x0F
 		}
 	case portSC:
 		x = 0
@@ -295,26 +310,30 @@ func (m *memory) writePort(addr uint16, x byte) {
 		x = 0
 	case portTAC:
 		switch x & 3 {
-		case 0: m.timaOverflow = 256
-		case 1: m.timaOverflow = 4
-		case 2: m.timaOverflow = 16
-		case 3: m.timaOverflow = 64
+		case 0:
+			m.timaOverflow = 256
+		case 1:
+			m.timaOverflow = 4
+		case 2:
+			m.timaOverflow = 16
+		case 3:
+			m.timaOverflow = 64
 		}
 		m.timaTicks = 0
 	case portLCDC:
-		m.lcdEnable = x & 0x80 != 0
-		m.windowMap = x & 0x40 != 0
-		m.windowEnable = x & 0x20 != 0
-		m.tileData = x & 0x10 != 0
-		m.bgMap = x & 0x08 != 0
-		m.spriteSize = x & 0x04 != 0
-		m.spriteEnable = x & 0x02 != 0
-		m.bgEnable = x & 0x01 != 0
+		m.lcdEnable = x&0x80 != 0
+		m.windowMap = x&0x40 != 0
+		m.windowEnable = x&0x20 != 0
+		m.tileData = x&0x10 != 0
+		m.bgMap = x&0x08 != 0
+		m.spriteSize = x&0x04 != 0
+		m.spriteEnable = x&0x02 != 0
+		m.bgEnable = x&0x01 != 0
 	case portSTAT:
-		m.lycInterrupt = x & 0x40 != 0
-		m.oamInterrupt = x & 0x20 != 0
-		m.vblankInterrupt = x & 0x10 != 0
-		m.hblankInterrupt = x & 0x08 != 0
+		m.lycInterrupt = x&0x40 != 0
+		m.oamInterrupt = x&0x20 != 0
+		m.vblankInterrupt = x&0x10 != 0
+		m.hblankInterrupt = x&0x08 != 0
 		m.lcdMode = x & 0x03
 	case portLY:
 		m.clock = 0
@@ -338,7 +357,7 @@ func (m *memory) writePort(addr uint16, x byte) {
 		src := uint16(x) << 8
 		m.dma(src)
 	}
-	m.hram[addr - 0xFF00] = x
+	m.hram[addr-0xFF00] = x
 }
 
 func (m *memory) updateTimers(t int) {
@@ -348,7 +367,9 @@ func (m *memory) updateTimers(t int) {
 		m.hram[0x04] += byte(d)
 		m.divTicks -= d * divOverflow
 	}
-	if m.hram[0x07] & 4 == 0 { return }
+	if m.hram[0x07]&4 == 0 {
+		return
+	}
 	m.timaTicks += t
 	if m.timaTicks > m.timaOverflow {
 		d := m.timaTicks / m.timaOverflow
@@ -378,26 +399,42 @@ func (m *memory) pumpEvents() {
 		case sdl.KEYUP:
 			kev := ev.Keyboard()
 			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:   m.dpadBits |= 0x08
-			case sdl.K_UP:     m.dpadBits |= 0x04
-			case sdl.K_LEFT:   m.dpadBits |= 0x02
-			case sdl.K_RIGHT:  m.dpadBits |= 0x01
-			case sdl.K_RETURN: m.btnBits  |= 0x08
-			case sdl.K_RSHIFT: m.btnBits  |= 0x04
-			case sdl.K_z:      m.btnBits  |= 0x02
-			case sdl.K_x:      m.btnBits  |= 0x01
+			case sdl.K_DOWN:
+				m.dpadBits |= 0x08
+			case sdl.K_UP:
+				m.dpadBits |= 0x04
+			case sdl.K_LEFT:
+				m.dpadBits |= 0x02
+			case sdl.K_RIGHT:
+				m.dpadBits |= 0x01
+			case sdl.K_RETURN:
+				m.btnBits |= 0x08
+			case sdl.K_RSHIFT:
+				m.btnBits |= 0x04
+			case sdl.K_z:
+				m.btnBits |= 0x02
+			case sdl.K_x:
+				m.btnBits |= 0x01
 			}
 		case sdl.KEYDOWN:
 			kev := ev.Keyboard()
 			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:   m.dpadBits &^= 0x08
-			case sdl.K_UP:     m.dpadBits &^= 0x04
-			case sdl.K_LEFT:   m.dpadBits &^= 0x02
-			case sdl.K_RIGHT:  m.dpadBits &^= 0x01
-			case sdl.K_RETURN: m.btnBits  &^= 0x08
-			case sdl.K_RSHIFT: m.btnBits  &^= 0x04
-			case sdl.K_z:      m.btnBits  &^= 0x02
-			case sdl.K_x:      m.btnBits  &^= 0x01
+			case sdl.K_DOWN:
+				m.dpadBits &^= 0x08
+			case sdl.K_UP:
+				m.dpadBits &^= 0x04
+			case sdl.K_LEFT:
+				m.dpadBits &^= 0x02
+			case sdl.K_RIGHT:
+				m.dpadBits &^= 0x01
+			case sdl.K_RETURN:
+				m.btnBits &^= 0x08
+			case sdl.K_RSHIFT:
+				m.btnBits &^= 0x04
+			case sdl.K_z:
+				m.btnBits &^= 0x02
+			case sdl.K_x:
+				m.btnBits &^= 0x01
 			}
 		}
 	}
@@ -465,7 +502,7 @@ func (m *memory) saveName() string {
 func (m *memory) dump(w io.Writer) {
 	var addr int
 
-	read := func () (x byte, e interface{}) {
+	read := func() (x byte, e interface{}) {
 		defer func() {
 			e = recover()
 			addr++

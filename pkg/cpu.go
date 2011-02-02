@@ -7,32 +7,32 @@ import (
 
 type cpu struct {
 	*memory
-	a, b, c, d, e byte
-	hl, pc, sp uint16
-	fz, fn, fh, fc bool
+	a, b, c, d, e    byte
+	hl, pc, sp       uint16
+	fz, fn, fh, fc   bool
 	ime, halt, pause bool
-	mar uint16
-	stack uint16
-	trace [256]uint16
-	traceptr byte
+	mar              uint16
+	stack            uint16
+	trace            [256]uint16
+	traceptr         byte
 }
 
 var fdxTable, fdxTableCB [256]func(*cpu) int
 
 func newCPU(m *memory) *cpu {
-	return &cpu { memory: m,
-	        a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
+	return &cpu{memory: m,
+		a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xD8,
 		hl: 0x014D, pc: 0x0100, sp: 0xFFFE,
 		fz: true, fn: false, fh: true, fc: true,
 		ime: true, halt: false, pause: true,
-		mar: 0x0100, stack: 0xFFFE }
+		mar: 0x0100, stack: 0xFFFE}
 }
 
 func (sys *cpu) String() string {
 	return fmt.Sprintf(
-		"<cpu AF=%04X BC=%04X DE=%04X HL=%04X\n" +
-		"     PC=%04X SP=%04X\n" +
-		"     IME=%t Halt=%t Pause=%t>",
+		"<cpu AF=%04X BC=%04X DE=%04X HL=%04X\n"+
+			"     PC=%04X SP=%04X\n"+
+			"     IME=%t Halt=%t Pause=%t>",
 		sys.af(), sys.bc(), sys.de(), sys.hl,
 		sys.pc, sys.sp, sys.ime, sys.halt, sys.pause)
 }
@@ -44,7 +44,7 @@ func (sys *cpu) step() int {
 			sys.pc < 0xC000 && sys.pc >= 0xFE00 {
 			panic("executing data")
 		}
-		if sys.stack - sys.sp >= 0x7E {
+		if sys.stack-sys.sp >= 0x7E {
 			panic("stack overflow")
 		}
 		sys.mar = sys.pc
@@ -69,19 +69,19 @@ func (sys *cpu) irq(mask, f byte) int {
 	sys.ime = false
 	sys.halt = false
 	sys.push(sys.pc)
-	if mask & 0x01 != 0 {
+	if mask&0x01 != 0 {
 		sys.pc = vblankAddr
 		f &^= 0x01
-	} else if mask & 0x02 != 0 {
+	} else if mask&0x02 != 0 {
 		sys.pc = lcdStatusAddr
 		f &^= 0x02
-	} else if mask & 0x04 != 0 {
+	} else if mask&0x04 != 0 {
 		sys.pc = timerAddr
 		f &^= 0x04
-	} else if mask & 0x08 != 0 {
+	} else if mask&0x08 != 0 {
 		sys.pc = serialAddr
 		f &^= 0x08
-	} else if mask & 0x10 != 0 {
+	} else if mask&0x10 != 0 {
 		sys.pc = joypadAddr
 		f &^= 0x10
 	}
@@ -90,7 +90,7 @@ func (sys *cpu) irq(mask, f byte) int {
 }
 
 func (sys *cpu) dumpStack(w io.Writer) {
-	addr := sys.stack-2
+	addr := sys.stack - 2
 	read := func() (x uint16, e interface{}) {
 		defer func() {
 			addr -= 2
@@ -129,284 +129,8 @@ func (sys *cpu) traceback(w io.Writer) {
 	fmt.Fprintln(w)
 }
 
-func (m *memory) disasm(addr uint16) (result string) {
-	defer func() {
-		if e := recover(); e != nil {
-			result = "(read failed!)"
-		}
-	}()
-	code := m.readByte(addr)
-	imm8 := m.readByte(addr+1)
-	imm16 := m.readWord(addr+1)
-	rel8 := int8(imm8)
-	jra := addr + 2 + uint16(rel8)
-	switch code {
-	case 0x00: return "NOP"
-	case 0x01: return fmt.Sprintf("LD BC,%04Xh", imm16)
-	case 0x02: return "LD (BC),A"
-	case 0x03: return "INC BC"
-	case 0x04: return "INC B"
-	case 0x05: return "DEC B"
-	case 0x06: return fmt.Sprintf("LD B,%02Xh", imm8)
-	case 0x07: return "RLCA"
-	case 0x08: return fmt.Sprintf("LD (%04Xh),SP", imm16)
-	case 0x09: return "ADD HL,BC"
-	case 0x0A: return "LD A,(BC)"
-	case 0x0B: return "DEC BC"
-	case 0x0C: return "INC C"
-	case 0x0D: return "DEC C"
-	case 0x0E: return fmt.Sprintf("LD C,%02Xh", imm8)
-	case 0x0F: return "RRCA"
-	case 0x10: return "STOP"
-	case 0x11: return fmt.Sprintf("LD DE,%04Xh", imm16)
-	case 0x12: return "LD (DE),A"
-	case 0x13: return "INC DE"
-	case 0x14: return "INC D"
-	case 0x15: return "DEC D"
-	case 0x16: return fmt.Sprintf("LD D,%02Xh", imm8)
-	case 0x17: return "RLA"
-	case 0x18: return fmt.Sprintf("JR %04Xh", jra)
-	case 0x19: return "ADD HL,DE"
-	case 0x1A: return "LD A,(DE)"
-	case 0x1B: return "DEC DE"
-	case 0x1C: return "INC E"
-	case 0x1D: return "DEC E"
-	case 0x1E: return fmt.Sprintf("LD E,%02Xh", imm8)
-	case 0x1F: return "RRA"
-	case 0x20: return fmt.Sprintf("JR NZ,%04Xh", jra)
-	case 0x21: return fmt.Sprintf("LD HL,%04Xh", imm16)
-	case 0x22: return "LD (HL+),A"
-	case 0x23: return "INC HL"
-	case 0x24: return "INC H"
-	case 0x25: return "DEC H"
-	case 0x26: return fmt.Sprintf("LD H,%02Xh", imm8)
-	case 0x27: return "DAA"
-	case 0x28: return fmt.Sprintf("JR Z,%04Xh", jra)
-	case 0x29: return "ADD HL,HL"
-	case 0x2A: return "LD A,(HL+)"
-	case 0x2B: return "DEC HL"
-	case 0x2C: return "INC L"
-	case 0x2D: return "DEC L"
-	case 0x2E: return fmt.Sprintf("LD L,%02Xh", imm8)
-	case 0x2F: return "CPL"
-	case 0x30: return fmt.Sprintf("JR NC,%04Xh", jra)
-	case 0x31: return fmt.Sprintf("LD SP,%04Xh", imm16)
-	case 0x32: return "LD (HL-),A"
-	case 0x33: return "INC SP"
-	case 0x34: return "INC (HL)"
-	case 0x35: return "DEC (HL)"
-	case 0x36: return fmt.Sprintf("LD (HL),%02Xh", imm8)
-	case 0x37: return "SCF"
-	case 0x38: return fmt.Sprintf("JR C,%04Xh", jra)
-	case 0x39: return "ADD HL,SP"
-	case 0x3A: return "LD A,(HL-)"
-	case 0x3B: return "DEC SP"
-	case 0x3C: return "INC A"
-	case 0x3D: return "DEC A"
-	case 0x3E: return fmt.Sprintf("LD A,%02Xh", imm8)
-	case 0x3F: return "CCF"
-	case 0x40: return "LD B,B"
-	case 0x41: return "LD B,C"
-	case 0x42: return "LD B,D"
-	case 0x43: return "LD B,E"
-	case 0x44: return "LD B,H"
-	case 0x45: return "LD B.L"
-	case 0x46: return "LD B,(HL)"
-	case 0x47: return "LD B,A"
-	case 0x48: return "LD C,B"
-	case 0x49: return "LD C,C"
-	case 0x4A: return "LD C,D"
-	case 0x4B: return "LD C,E"
-	case 0x4C: return "LD C,H"
-	case 0x4D: return "LD C,L"
-	case 0x4E: return "LD C,(HL)"
-	case 0x4F: return "LD C,A"
-	case 0x50: return "LD D,B"
-	case 0x51: return "LD D,C"
-	case 0x52: return "LD D,D"
-	case 0x53: return "LD D,E"
-	case 0x54: return "LD D,H"
-	case 0x55: return "LD D,L"
-	case 0x56: return "LD D,(HL)"
-	case 0x57: return "LD D,A"
-	case 0x58: return "LD E,B"
-	case 0x59: return "LD E,C"
-	case 0x5A: return "LD E,D"
-	case 0x5B: return "LD E,E"
-	case 0x5C: return "LD E,H"
-	case 0x5D: return "LD E,L"
-	case 0x5E: return "LD E,(HL)"
-	case 0x5F: return "LD E,A"
-	case 0x60: return "LD H,B"
-	case 0x61: return "LD H,C"
-	case 0x62: return "LD H,D"
-	case 0x63: return "LD H,E"
-	case 0x64: return "LD H,H"
-	case 0x65: return "LD H,L"
-	case 0x66: return "LD H,(HL)"
-	case 0x67: return "LD H,A"
-	case 0x68: return "LD L,B"
-	case 0x69: return "LD L,C"
-	case 0x6A: return "LD L,D"
-	case 0x6B: return "LD L,E"
-	case 0x6C: return "LD L,H"
-	case 0x6D: return "LD L,L"
-	case 0x6E: return "LD L,(HL)"
-	case 0x6F: return "LD L,A"
-	case 0x70: return "LD (HL),B"
-	case 0x71: return "LD (HL),c"
-	case 0x72: return "LD (HL),D"
-	case 0x73: return "LD (HL),E"
-	case 0x74: return "LD (HL),H"
-	case 0x75: return "LD (HL),L"
-	case 0x76: return "HALT"
-	case 0x77: return "LD (HL),A"
-	case 0x78: return "LD A,B"
-	case 0x79: return "LD A,C"
-	case 0x7A: return "LD A,D"
-	case 0x7B: return "LD A,E"
-	case 0x7C: return "LD A,H"
-	case 0x7D: return "LD A,L"
-	case 0x7E: return "LD A,(HL)"
-	case 0x7F: return "LD A,A"
-	case 0x80: return "ADD A,B"
-	case 0x81: return "ADD A,C"
-	case 0x82: return "ADD A,D"
-	case 0x83: return "ADD A,E"
-	case 0x84: return "ADD A,H"
-	case 0x85: return "ADD A,L"
-	case 0x86: return "ADD A,(HL)"
-	case 0x87: return "ADD A,A"
-	case 0x88: return "ADC A,B"
-	case 0x89: return "ADC A,C"
-	case 0x8A: return "ADC A,D"
-	case 0x8B: return "ADC A,E"
-	case 0x8C: return "ADC A,H"
-	case 0x8D: return "ADC A,L"
-	case 0x8E: return "ADC A,(HL)"
-	case 0x8F: return "ADC A,A"
-	case 0x90: return "SUB B"
-	case 0x91: return "SUB C"
-	case 0x92: return "SUB D"
-	case 0x93: return "SUB E"
-	case 0x94: return "SUB H"
-	case 0x95: return "SUB L"
-	case 0x96: return "SUB (HL)"
-	case 0x97: return "SUB A"
-	case 0x98: return "SBC B"
-	case 0x99: return "SBC C"
-	case 0x9A: return "SBC D"
-	case 0x9B: return "SBC E"
-	case 0x9C: return "SBC H"
-	case 0x9D: return "SBC L"
-	case 0x9E: return "SBC (HL)"
-	case 0x9F: return "SBC A"
-	case 0xA0: return "AND B"
-	case 0xA1: return "AND C"
-	case 0xA2: return "AND D"
-	case 0xA3: return "AND E"
-	case 0xA4: return "AND H"
-	case 0xA5: return "AND L"
-	case 0xA6: return "AND (HL)"
-	case 0xA7: return "AND A"
-	case 0xA8: return "XOR B"
-	case 0xA9: return "XOR C"
-	case 0xAA: return "XOR D"
-	case 0xAB: return "XOR E"
-	case 0xAC: return "XOR H"
-	case 0xAD: return "XOR L"
-	case 0xAE: return "XOR (HL)"
-	case 0xAF: return "XOR A"
-	case 0xB0: return "OR B"
-	case 0xB1: return "OR C"
-	case 0xB2: return "OR D"
-	case 0xB3: return "OR E"
-	case 0xB4: return "OR H"
-	case 0xB5: return "OR L"
-	case 0xB6: return "OR (HL)"
-	case 0xB7: return "OR A"
-	case 0xB8: return "CP B"
-	case 0xB9: return "CP C"
-	case 0xBA: return "CP D"
-	case 0xBB: return "CP E"
-	case 0xBC: return "CP H"
-	case 0xBD: return "CP L"
-	case 0xBE: return "CP (HL)"
-	case 0xBF: return "CP A"
-	case 0xC0: return "RET NZ"
-	case 0xC1: return "POP BC"
-	case 0xC2: return fmt.Sprintf("JP NZ,%04Xh", imm16)
-	case 0xC3: return fmt.Sprintf("JP %04Xh", imm16)
-	case 0xC4: return fmt.Sprintf("CALL NZ,%04Xh", imm16)
-	case 0xC5: return "PUSH BC"
-	case 0xC6: return fmt.Sprintf("ADD A,%02Xh", imm8)
-	case 0xC7: return "RST 00h"
-	case 0xC8: return "RET Z"
-	case 0xC9: return "RET"
-	case 0xCA: return fmt.Sprintf("JP Z,%04Xh", imm16)
-	case 0xCB:
-		regs := [...]string{"B","C","D","E","H","L","(HL)","A"}
-		reg := regs[imm8 & 7]
-		bit := (imm8 >> 3) & 7
-		switch {
-		case imm8 < 0x08: return fmt.Sprintf("RLC %s", reg)
-		case imm8 < 0x10: return fmt.Sprintf("RRC %s", reg)
-		case imm8 < 0x18: return fmt.Sprintf("RL %s", reg)
-		case imm8 < 0x20: return fmt.Sprintf("RR %s", reg)
-		case imm8 < 0x28: return fmt.Sprintf("SLA %s", reg)
-		case imm8 < 0x30: return fmt.Sprintf("SRA %s", reg)
-		case imm8 < 0x38: return fmt.Sprintf("SWAP %s", reg)
-		case imm8 < 0x40: return fmt.Sprintf("SRL %s", reg)
-		case imm8 < 0x80: return fmt.Sprintf("BIT %d,%s", bit, reg)
-		case imm8 < 0xC0: return fmt.Sprintf("RES %d,%s", bit, reg)
-		default:          return fmt.Sprintf("SET %d,%s", bit, reg)
-		}
-	case 0xCC: return fmt.Sprintf("CALL Z,%04Xh", imm16)
-	case 0xCD: return fmt.Sprintf("CALL %04Xh", imm16)
-	case 0xCE: return fmt.Sprintf("ADC A,%02Xh", imm8)
-	case 0xCF: return "RST 08h"
-	case 0xD0: return "RET NC"
-	case 0xD1: return "POP DE"
-	case 0xD2: return fmt.Sprintf("JP NC,%04Xh", imm16)
-	case 0xD4: return fmt.Sprintf("CALL NC,%04Xh", imm16)
-	case 0xD5: return "PUSH DE"
-	case 0xD6: return fmt.Sprintf("SUB %02Xh", imm8)
-	case 0xD7: return "RST 10h"
-	case 0xD8: return "RET C"
-	case 0xD9: return "RETI"
-	case 0xDA: return fmt.Sprintf("JP C,%04Xh", imm16)
-	case 0xDC: return fmt.Sprintf("CALL C,%04Xh", imm16)
-	case 0xDE: return fmt.Sprintf("SBC %02Xh", imm8)
-	case 0xDF: return "RST 18h"
-	case 0xE0: return fmt.Sprintf("LDH (%02Xh),A", imm8)
-	case 0xE1: return "POP HL"
-	case 0xE2: return "LD (C),A"
-	case 0xE5: return "PUSH HL"
-	case 0xE6: return fmt.Sprintf("AND %02Xh", imm8)
-	case 0xE7: return "RST 20h"
-	case 0xE8: return fmt.Sprintf("ADD SP,%d", rel8)
-	case 0xE9: return "JP (HL)"
-	case 0xEA: return fmt.Sprintf("LD (%04Xh),A", imm16)
-	case 0xEE: return fmt.Sprintf("XOR %02Xh", imm8)
-	case 0xEF: return "RST 28h"
-	case 0xF0: return fmt.Sprintf("LDH A,(%02Xh)", imm8)
-	case 0xF1: return "POP AF"
-	case 0xF2: return "LD A,(C)"
-	case 0xF3: return "DI"
-	case 0xF5: return "PUSH AF"
-	case 0xF6: return fmt.Sprintf("OR %02Xh", imm8)
-	case 0xF7: return "RST 30h"
-	case 0xF8: return fmt.Sprintf("LD HL,SP%+d", rel8)
-	case 0xF9: return "LD SP,HL"
-	case 0xFA: return fmt.Sprintf("LD A,(%04Xh)", imm16)
-	case 0xFB: return "EI"
-	case 0xFE: return fmt.Sprintf("CP %02Xh", imm8)
-	case 0xFF: return "RST 38h"
-	}
-	return fmt.Sprintf("%02Xh", code)
-}
-
-// Returns the time in cycles/4. One cycle = 1/4194304 seconds.
+// Fetch-decode-execute. Returns cycles/4. One cycle is 1/4194304
+// seconds.
 func (sys *cpu) fdx() int {
 	return fdxTable[sys.fetchByte()](sys)
 }
@@ -415,7 +139,7 @@ func (sys *cpu) jr(pred bool) int {
 	x := sys.fetchByte()
 	if pred {
 		sys.pc += uint16(int8(x))
-		return 12/4
+		return 12 / 4
 	}
 	return 2
 }
@@ -423,7 +147,7 @@ func (sys *cpu) jr(pred bool) int {
 func (sys *cpu) ret(pred bool) int {
 	if pred {
 		sys.pc = sys.pop()
-		return 20/4
+		return 20 / 4
 	}
 	return 2
 }
@@ -432,7 +156,7 @@ func (sys *cpu) jp(pred bool) int {
 	x := sys.fetchWord()
 	if pred {
 		sys.pc = x
-		return 16/4
+		return 16 / 4
 	}
 	return 3
 }
@@ -442,7 +166,7 @@ func (sys *cpu) call(pred bool) int {
 	if pred {
 		sys.push(sys.pc)
 		sys.pc = x
-		return 24/4
+		return 24 / 4
 	}
 	return 3
 }
@@ -485,7 +209,7 @@ func (sys *cpu) dec(x byte) byte {
 func (sys *cpu) add16(x, y uint16) uint16 {
 	x1 := x + y
 	sys.fn = false
-	sys.fh = x1 & 0x0FFF < x & 0x0FFF
+	sys.fh = x1&0x0FFF < x&0x0FFF
 	sys.fc = x1 < x
 	return x1
 }
@@ -494,18 +218,20 @@ func (sys *cpu) add(x byte) {
 	y := sys.a + x
 	sys.fz = y == 0
 	sys.fn = false
-	sys.fh = y & 0x0F < sys.a & 0x0F
+	sys.fh = y&0x0F < sys.a&0x0F
 	sys.fc = y < sys.a
 	sys.a = y
 }
 
 func (sys *cpu) adc(x byte) {
 	fc := byte(0)
-	if sys.fc { fc = 1 }
+	if sys.fc {
+		fc = 1
+	}
 	y := sys.a + x + fc
 	sys.fz = y == 0
 	sys.fn = false
-	sys.fh = y & 0x0F < sys.a & 0x0F
+	sys.fh = y&0x0F < sys.a&0x0F
 	sys.fc = y < sys.a
 	sys.a = y
 }
@@ -514,18 +240,20 @@ func (sys *cpu) sub(x byte) {
 	y := sys.a - x
 	sys.fz = y == 0
 	sys.fn = true
-	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fh = y&0x0F > sys.a&0x0F
 	sys.fc = y > sys.a
 	sys.a = y
 }
 
 func (sys *cpu) sbc(x byte) {
 	fc := byte(0)
-	if sys.fc { fc = 1 }
+	if sys.fc {
+		fc = 1
+	}
 	y := sys.a - x - fc
 	sys.fz = y == 0
 	sys.fn = true
-	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fh = y&0x0F > sys.a&0x0F
 	sys.fc = y > sys.a
 	sys.a = y
 }
@@ -558,13 +286,13 @@ func (sys *cpu) cp(x byte) {
 	y := sys.a - x
 	sys.fz = y == 0
 	sys.fn = true
-	sys.fh = y & 0x0F > sys.a & 0x0F
+	sys.fh = y&0x0F > sys.a&0x0F
 	sys.fc = y > sys.a
 }
 
 func (sys *cpu) rlc(x byte) byte {
 	fc := x >> 7
-	y := x << 1 | fc
+	y := x<<1 | fc
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
@@ -574,7 +302,7 @@ func (sys *cpu) rlc(x byte) byte {
 
 func (sys *cpu) rrc(x byte) byte {
 	fc := x << 7
-	y := x >> 1 | fc
+	y := x>>1 | fc
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
@@ -584,23 +312,27 @@ func (sys *cpu) rrc(x byte) byte {
 
 func (sys *cpu) rl(x byte) byte {
 	fc := byte(0)
-	if sys.fc { fc = 1 }
-	y := x << 1 | fc
+	if sys.fc {
+		fc = 1
+	}
+	y := x<<1 | fc
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x & 1 == 1
+	sys.fc = x&1 == 1
 	return y
 }
 
 func (sys *cpu) rr(x byte) byte {
 	fc := byte(0)
-	if sys.fc { fc = 0x80 }
-	y := x >> 1 | fc
+	if sys.fc {
+		fc = 0x80
+	}
+	y := x>>1 | fc
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x & 0x80 == 0x80
+	sys.fc = x&0x80 == 0x80
 	return y
 }
 
@@ -609,7 +341,7 @@ func (sys *cpu) sla(x byte) byte {
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x & 0x80 == 0x80
+	sys.fc = x&0x80 == 0x80
 	return y
 }
 
@@ -618,7 +350,7 @@ func (sys *cpu) sra(x byte) byte {
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x & 1 == 1
+	sys.fc = x&1 == 1
 	return y
 }
 
@@ -627,12 +359,12 @@ func (sys *cpu) srl(x byte) byte {
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x & 1 == 1
+	sys.fc = x&1 == 1
 	return y
 }
 
 func (sys *cpu) swap(x byte) byte {
-	y := x >> 4 | x << 4
+	y := x>>4 | x<<4
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
@@ -641,7 +373,7 @@ func (sys *cpu) swap(x byte) byte {
 }
 
 func (sys *cpu) bit(n, x byte) {
-	sys.fz = x & (1 << n) != 0
+	sys.fz = x&(1<<n) != 0
 	sys.fn = false
 	sys.fh = true
 }
@@ -651,14 +383,14 @@ func res(n, x byte) byte {
 }
 
 func set(n, x byte) byte {
-	return x | 1 << n
+	return x | 1<<n
 }
 
 // DAA and DAS implementations based on pseudocode from 80386
 // instruction set references.
 
 func (sys *cpu) daa() {
-	if sys.a & 0x0F > 9 || sys.fh {
+	if sys.a&0x0F > 9 || sys.fh {
 		sys.a += 6
 		sys.fh = true
 	} else {
@@ -674,7 +406,7 @@ func (sys *cpu) daa() {
 }
 
 func (sys *cpu) das() {
-	if sys.a & 0x0F > 9 || sys.fh {
+	if sys.a&0x0F > 9 || sys.fh {
 		sys.a -= 6
 		sys.fh = true
 	} else {
@@ -692,10 +424,18 @@ func (sys *cpu) das() {
 func (sys *cpu) af() uint16 {
 	a := uint16(sys.a)
 	f := uint16(0)
-	if sys.fz { f |= 0x80 }
-	if sys.fn { f |= 0x40 }
-	if sys.fh { f |= 0x20 }
-	if sys.fc { f |= 0x10 }
+	if sys.fz {
+		f |= 0x80
+	}
+	if sys.fn {
+		f |= 0x40
+	}
+	if sys.fh {
+		f |= 0x20
+	}
+	if sys.fc {
+		f |= 0x10
+	}
 	return (a << 8) | f
 }
 
@@ -2871,4 +2611,536 @@ func init() {
 			return 2
 		},
 	}
+}
+
+func (m *memory) disasm(addr uint16) (result string) {
+	defer func() {
+		if e := recover(); e != nil {
+			result = "(read failed!)"
+		}
+	}()
+	code := m.readByte(addr)
+	imm8 := m.readByte(addr + 1)
+	imm16 := m.readWord(addr + 1)
+	rel8 := int8(imm8)
+	jra := addr + 2 + uint16(rel8)
+	switch code {
+	case 0x00:
+		return "NOP"
+	case 0x01:
+		return fmt.Sprintf("LD BC,%04Xh", imm16)
+	case 0x02:
+		return "LD (BC),A"
+	case 0x03:
+		return "INC BC"
+	case 0x04:
+		return "INC B"
+	case 0x05:
+		return "DEC B"
+	case 0x06:
+		return fmt.Sprintf("LD B,%02Xh", imm8)
+	case 0x07:
+		return "RLCA"
+	case 0x08:
+		return fmt.Sprintf("LD (%04Xh),SP", imm16)
+	case 0x09:
+		return "ADD HL,BC"
+	case 0x0A:
+		return "LD A,(BC)"
+	case 0x0B:
+		return "DEC BC"
+	case 0x0C:
+		return "INC C"
+	case 0x0D:
+		return "DEC C"
+	case 0x0E:
+		return fmt.Sprintf("LD C,%02Xh", imm8)
+	case 0x0F:
+		return "RRCA"
+	case 0x10:
+		return "STOP"
+	case 0x11:
+		return fmt.Sprintf("LD DE,%04Xh", imm16)
+	case 0x12:
+		return "LD (DE),A"
+	case 0x13:
+		return "INC DE"
+	case 0x14:
+		return "INC D"
+	case 0x15:
+		return "DEC D"
+	case 0x16:
+		return fmt.Sprintf("LD D,%02Xh", imm8)
+	case 0x17:
+		return "RLA"
+	case 0x18:
+		return fmt.Sprintf("JR %04Xh", jra)
+	case 0x19:
+		return "ADD HL,DE"
+	case 0x1A:
+		return "LD A,(DE)"
+	case 0x1B:
+		return "DEC DE"
+	case 0x1C:
+		return "INC E"
+	case 0x1D:
+		return "DEC E"
+	case 0x1E:
+		return fmt.Sprintf("LD E,%02Xh", imm8)
+	case 0x1F:
+		return "RRA"
+	case 0x20:
+		return fmt.Sprintf("JR NZ,%04Xh", jra)
+	case 0x21:
+		return fmt.Sprintf("LD HL,%04Xh", imm16)
+	case 0x22:
+		return "LD (HL+),A"
+	case 0x23:
+		return "INC HL"
+	case 0x24:
+		return "INC H"
+	case 0x25:
+		return "DEC H"
+	case 0x26:
+		return fmt.Sprintf("LD H,%02Xh", imm8)
+	case 0x27:
+		return "DAA"
+	case 0x28:
+		return fmt.Sprintf("JR Z,%04Xh", jra)
+	case 0x29:
+		return "ADD HL,HL"
+	case 0x2A:
+		return "LD A,(HL+)"
+	case 0x2B:
+		return "DEC HL"
+	case 0x2C:
+		return "INC L"
+	case 0x2D:
+		return "DEC L"
+	case 0x2E:
+		return fmt.Sprintf("LD L,%02Xh", imm8)
+	case 0x2F:
+		return "CPL"
+	case 0x30:
+		return fmt.Sprintf("JR NC,%04Xh", jra)
+	case 0x31:
+		return fmt.Sprintf("LD SP,%04Xh", imm16)
+	case 0x32:
+		return "LD (HL-),A"
+	case 0x33:
+		return "INC SP"
+	case 0x34:
+		return "INC (HL)"
+	case 0x35:
+		return "DEC (HL)"
+	case 0x36:
+		return fmt.Sprintf("LD (HL),%02Xh", imm8)
+	case 0x37:
+		return "SCF"
+	case 0x38:
+		return fmt.Sprintf("JR C,%04Xh", jra)
+	case 0x39:
+		return "ADD HL,SP"
+	case 0x3A:
+		return "LD A,(HL-)"
+	case 0x3B:
+		return "DEC SP"
+	case 0x3C:
+		return "INC A"
+	case 0x3D:
+		return "DEC A"
+	case 0x3E:
+		return fmt.Sprintf("LD A,%02Xh", imm8)
+	case 0x3F:
+		return "CCF"
+	case 0x40:
+		return "LD B,B"
+	case 0x41:
+		return "LD B,C"
+	case 0x42:
+		return "LD B,D"
+	case 0x43:
+		return "LD B,E"
+	case 0x44:
+		return "LD B,H"
+	case 0x45:
+		return "LD B.L"
+	case 0x46:
+		return "LD B,(HL)"
+	case 0x47:
+		return "LD B,A"
+	case 0x48:
+		return "LD C,B"
+	case 0x49:
+		return "LD C,C"
+	case 0x4A:
+		return "LD C,D"
+	case 0x4B:
+		return "LD C,E"
+	case 0x4C:
+		return "LD C,H"
+	case 0x4D:
+		return "LD C,L"
+	case 0x4E:
+		return "LD C,(HL)"
+	case 0x4F:
+		return "LD C,A"
+	case 0x50:
+		return "LD D,B"
+	case 0x51:
+		return "LD D,C"
+	case 0x52:
+		return "LD D,D"
+	case 0x53:
+		return "LD D,E"
+	case 0x54:
+		return "LD D,H"
+	case 0x55:
+		return "LD D,L"
+	case 0x56:
+		return "LD D,(HL)"
+	case 0x57:
+		return "LD D,A"
+	case 0x58:
+		return "LD E,B"
+	case 0x59:
+		return "LD E,C"
+	case 0x5A:
+		return "LD E,D"
+	case 0x5B:
+		return "LD E,E"
+	case 0x5C:
+		return "LD E,H"
+	case 0x5D:
+		return "LD E,L"
+	case 0x5E:
+		return "LD E,(HL)"
+	case 0x5F:
+		return "LD E,A"
+	case 0x60:
+		return "LD H,B"
+	case 0x61:
+		return "LD H,C"
+	case 0x62:
+		return "LD H,D"
+	case 0x63:
+		return "LD H,E"
+	case 0x64:
+		return "LD H,H"
+	case 0x65:
+		return "LD H,L"
+	case 0x66:
+		return "LD H,(HL)"
+	case 0x67:
+		return "LD H,A"
+	case 0x68:
+		return "LD L,B"
+	case 0x69:
+		return "LD L,C"
+	case 0x6A:
+		return "LD L,D"
+	case 0x6B:
+		return "LD L,E"
+	case 0x6C:
+		return "LD L,H"
+	case 0x6D:
+		return "LD L,L"
+	case 0x6E:
+		return "LD L,(HL)"
+	case 0x6F:
+		return "LD L,A"
+	case 0x70:
+		return "LD (HL),B"
+	case 0x71:
+		return "LD (HL),c"
+	case 0x72:
+		return "LD (HL),D"
+	case 0x73:
+		return "LD (HL),E"
+	case 0x74:
+		return "LD (HL),H"
+	case 0x75:
+		return "LD (HL),L"
+	case 0x76:
+		return "HALT"
+	case 0x77:
+		return "LD (HL),A"
+	case 0x78:
+		return "LD A,B"
+	case 0x79:
+		return "LD A,C"
+	case 0x7A:
+		return "LD A,D"
+	case 0x7B:
+		return "LD A,E"
+	case 0x7C:
+		return "LD A,H"
+	case 0x7D:
+		return "LD A,L"
+	case 0x7E:
+		return "LD A,(HL)"
+	case 0x7F:
+		return "LD A,A"
+	case 0x80:
+		return "ADD A,B"
+	case 0x81:
+		return "ADD A,C"
+	case 0x82:
+		return "ADD A,D"
+	case 0x83:
+		return "ADD A,E"
+	case 0x84:
+		return "ADD A,H"
+	case 0x85:
+		return "ADD A,L"
+	case 0x86:
+		return "ADD A,(HL)"
+	case 0x87:
+		return "ADD A,A"
+	case 0x88:
+		return "ADC A,B"
+	case 0x89:
+		return "ADC A,C"
+	case 0x8A:
+		return "ADC A,D"
+	case 0x8B:
+		return "ADC A,E"
+	case 0x8C:
+		return "ADC A,H"
+	case 0x8D:
+		return "ADC A,L"
+	case 0x8E:
+		return "ADC A,(HL)"
+	case 0x8F:
+		return "ADC A,A"
+	case 0x90:
+		return "SUB B"
+	case 0x91:
+		return "SUB C"
+	case 0x92:
+		return "SUB D"
+	case 0x93:
+		return "SUB E"
+	case 0x94:
+		return "SUB H"
+	case 0x95:
+		return "SUB L"
+	case 0x96:
+		return "SUB (HL)"
+	case 0x97:
+		return "SUB A"
+	case 0x98:
+		return "SBC B"
+	case 0x99:
+		return "SBC C"
+	case 0x9A:
+		return "SBC D"
+	case 0x9B:
+		return "SBC E"
+	case 0x9C:
+		return "SBC H"
+	case 0x9D:
+		return "SBC L"
+	case 0x9E:
+		return "SBC (HL)"
+	case 0x9F:
+		return "SBC A"
+	case 0xA0:
+		return "AND B"
+	case 0xA1:
+		return "AND C"
+	case 0xA2:
+		return "AND D"
+	case 0xA3:
+		return "AND E"
+	case 0xA4:
+		return "AND H"
+	case 0xA5:
+		return "AND L"
+	case 0xA6:
+		return "AND (HL)"
+	case 0xA7:
+		return "AND A"
+	case 0xA8:
+		return "XOR B"
+	case 0xA9:
+		return "XOR C"
+	case 0xAA:
+		return "XOR D"
+	case 0xAB:
+		return "XOR E"
+	case 0xAC:
+		return "XOR H"
+	case 0xAD:
+		return "XOR L"
+	case 0xAE:
+		return "XOR (HL)"
+	case 0xAF:
+		return "XOR A"
+	case 0xB0:
+		return "OR B"
+	case 0xB1:
+		return "OR C"
+	case 0xB2:
+		return "OR D"
+	case 0xB3:
+		return "OR E"
+	case 0xB4:
+		return "OR H"
+	case 0xB5:
+		return "OR L"
+	case 0xB6:
+		return "OR (HL)"
+	case 0xB7:
+		return "OR A"
+	case 0xB8:
+		return "CP B"
+	case 0xB9:
+		return "CP C"
+	case 0xBA:
+		return "CP D"
+	case 0xBB:
+		return "CP E"
+	case 0xBC:
+		return "CP H"
+	case 0xBD:
+		return "CP L"
+	case 0xBE:
+		return "CP (HL)"
+	case 0xBF:
+		return "CP A"
+	case 0xC0:
+		return "RET NZ"
+	case 0xC1:
+		return "POP BC"
+	case 0xC2:
+		return fmt.Sprintf("JP NZ,%04Xh", imm16)
+	case 0xC3:
+		return fmt.Sprintf("JP %04Xh", imm16)
+	case 0xC4:
+		return fmt.Sprintf("CALL NZ,%04Xh", imm16)
+	case 0xC5:
+		return "PUSH BC"
+	case 0xC6:
+		return fmt.Sprintf("ADD A,%02Xh", imm8)
+	case 0xC7:
+		return "RST 00h"
+	case 0xC8:
+		return "RET Z"
+	case 0xC9:
+		return "RET"
+	case 0xCA:
+		return fmt.Sprintf("JP Z,%04Xh", imm16)
+	case 0xCB:
+		regs := [...]string{"B", "C", "D", "E", "H", "L", "(HL)", "A"}
+		reg := regs[imm8&7]
+		bit := (imm8 >> 3) & 7
+		switch {
+		case imm8 < 0x08:
+			return fmt.Sprintf("RLC %s", reg)
+		case imm8 < 0x10:
+			return fmt.Sprintf("RRC %s", reg)
+		case imm8 < 0x18:
+			return fmt.Sprintf("RL %s", reg)
+		case imm8 < 0x20:
+			return fmt.Sprintf("RR %s", reg)
+		case imm8 < 0x28:
+			return fmt.Sprintf("SLA %s", reg)
+		case imm8 < 0x30:
+			return fmt.Sprintf("SRA %s", reg)
+		case imm8 < 0x38:
+			return fmt.Sprintf("SWAP %s", reg)
+		case imm8 < 0x40:
+			return fmt.Sprintf("SRL %s", reg)
+		case imm8 < 0x80:
+			return fmt.Sprintf("BIT %d,%s", bit, reg)
+		case imm8 < 0xC0:
+			return fmt.Sprintf("RES %d,%s", bit, reg)
+		default:
+			return fmt.Sprintf("SET %d,%s", bit, reg)
+		}
+	case 0xCC:
+		return fmt.Sprintf("CALL Z,%04Xh", imm16)
+	case 0xCD:
+		return fmt.Sprintf("CALL %04Xh", imm16)
+	case 0xCE:
+		return fmt.Sprintf("ADC A,%02Xh", imm8)
+	case 0xCF:
+		return "RST 08h"
+	case 0xD0:
+		return "RET NC"
+	case 0xD1:
+		return "POP DE"
+	case 0xD2:
+		return fmt.Sprintf("JP NC,%04Xh", imm16)
+	case 0xD4:
+		return fmt.Sprintf("CALL NC,%04Xh", imm16)
+	case 0xD5:
+		return "PUSH DE"
+	case 0xD6:
+		return fmt.Sprintf("SUB %02Xh", imm8)
+	case 0xD7:
+		return "RST 10h"
+	case 0xD8:
+		return "RET C"
+	case 0xD9:
+		return "RETI"
+	case 0xDA:
+		return fmt.Sprintf("JP C,%04Xh", imm16)
+	case 0xDC:
+		return fmt.Sprintf("CALL C,%04Xh", imm16)
+	case 0xDE:
+		return fmt.Sprintf("SBC %02Xh", imm8)
+	case 0xDF:
+		return "RST 18h"
+	case 0xE0:
+		return fmt.Sprintf("LDH (%02Xh),A", imm8)
+	case 0xE1:
+		return "POP HL"
+	case 0xE2:
+		return "LD (C),A"
+	case 0xE5:
+		return "PUSH HL"
+	case 0xE6:
+		return fmt.Sprintf("AND %02Xh", imm8)
+	case 0xE7:
+		return "RST 20h"
+	case 0xE8:
+		return fmt.Sprintf("ADD SP,%d", rel8)
+	case 0xE9:
+		return "JP (HL)"
+	case 0xEA:
+		return fmt.Sprintf("LD (%04Xh),A", imm16)
+	case 0xEE:
+		return fmt.Sprintf("XOR %02Xh", imm8)
+	case 0xEF:
+		return "RST 28h"
+	case 0xF0:
+		return fmt.Sprintf("LDH A,(%02Xh)", imm8)
+	case 0xF1:
+		return "POP AF"
+	case 0xF2:
+		return "LD A,(C)"
+	case 0xF3:
+		return "DI"
+	case 0xF5:
+		return "PUSH AF"
+	case 0xF6:
+		return fmt.Sprintf("OR %02Xh", imm8)
+	case 0xF7:
+		return "RST 30h"
+	case 0xF8:
+		return fmt.Sprintf("LD HL,SP%+d", rel8)
+	case 0xF9:
+		return "LD SP,HL"
+	case 0xFA:
+		return fmt.Sprintf("LD A,(%04Xh)", imm16)
+	case 0xFB:
+		return "EI"
+	case 0xFE:
+		return fmt.Sprintf("CP %02Xh", imm8)
+	case 0xFF:
+		return "RST 38h"
+	}
+	return fmt.Sprintf("%02Xh", code)
 }

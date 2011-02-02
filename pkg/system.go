@@ -11,13 +11,15 @@ import (
 type Config struct {
 	SaveDir string
 	Verbose bool
-	Debug bool
+	Debug   bool
 }
 
 func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	var rom romImage
 	rom, err = loadROM(path)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	if cfg.Verbose {
 		rom.printInfo()
@@ -30,7 +32,9 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 
 	var mem *memory
 	mem, err = newMemory(rom)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	if e := mem.load(cfg.SaveDir); e != nil {
 		fmt.Fprintf(os.Stderr, "load failed: %v\n", e)
@@ -71,7 +75,8 @@ func run(cfg *Config, sys *cpu, lcd *display) {
 			break
 		}
 		var s int
-		for s = 0; s < 10; s += sys.step() {}
+		for s = 0; s < 10; s += sys.step() {
+		}
 		lcd.step(s)
 		t += s
 	}
@@ -95,10 +100,10 @@ func (rom romImage) printInfo() {
 
 func (sys *cpu) dump(w io.Writer) {
 	fmt.Fprintf(w,
-		"LAST INSTRUCTION\n" +
-		"%04X\t%s\n\n" +
-		"CPU STATE\n" +
-		"%v\n\n",
+		"LAST INSTRUCTION\n"+
+			"%04X\t%s\n\n"+
+			"CPU STATE\n"+
+			"%v\n\n",
 		sys.mar, sys.disasm(sys.mar), sys)
 	sys.dumpStack(w)
 	sys.traceback(w)
