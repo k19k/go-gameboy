@@ -64,7 +64,7 @@ const (
 )
 
 type memory struct {
-	rom []byte
+	rom romImage
 	vram [0x2000]byte
 	eram [0x8000]byte
 	wram [0x2000]byte
@@ -74,6 +74,8 @@ type memory struct {
 	romBank int
 	eramBank uint16
 	ramMode bool
+
+	mbcType int
 
 	// LCDC flags
 	lcdEnable bool
@@ -200,8 +202,10 @@ func (m *memory) writeWord(addr uint16, x uint16) {
 	m.writeByte(addr+1, uint8(x >> 8))
 }
 
-func newMemory(rom []byte) *memory {
-	m := &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+func newMemory(rom romImage) (m *memory, err interface{}) {
+	m = &memory{rom: rom, dpadBits: 0xF, btnBits: 0xF}
+	m.mbcType, err = rom.mbcType()
+	if err != nil { return }
 	m.writePort(portJOYP, 0x30)
 	m.writePort(portNR10, 0x80)
 	m.writePort(portNR11, 0xBF)
@@ -222,7 +226,7 @@ func newMemory(rom []byte) *memory {
 	m.writePort(portBGP,  0xFC)
 	m.writePort(portOBP0, 0xFF)
 	m.writePort(portOBP1, 0xFF)
-	return m
+	return
 }
 
 func (m *memory) readROM(addr uint16) byte {

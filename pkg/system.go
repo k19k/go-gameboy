@@ -3,32 +3,39 @@ package gameboy
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sdl"
 	"os"
 	"os/signal"
 )
 
-func Start(path string) (ch chan int, error interface{}) {
-	rom, err := ioutil.ReadFile(os.Args[1])
-	if err != nil {
-		return nil, err
-	}
+func Start(quit chan int, path string) (err interface{}) {
+	var rom romImage
+	rom, err = loadROM(path)
+	if err != nil { return }
+
+	fmt.Printf("Loaded ROM image '%s'\n", rom.title())
+	fmt.Printf("Logo match: %t\n", rom.checkLogo())
+	fmt.Printf("Header checksum: %t\n", rom.headerChecksum())
+	fmt.Printf("Global checksum: %t\n", rom.globalChecksum())
 
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {
-		return nil, sdl.GetError()
+		err = sdl.GetError()
+		return
 	}
 
-	mem := newMemory(rom)
+	var mem *memory
+	mem, err = newMemory(rom)
+	if err != nil { return }
+
 	sys := newCPU(mem)
 	lcd := newDisplay(mem)
 
-	ch = make(chan int)
-	go run(ch, sys, lcd)
-	return ch, nil
+	run(sys, lcd)
+	quit <- 1
+	return
 }
 
-func run(quit chan int, sys *cpu, lcd *display) {
+func run(sys *cpu, lcd *display) {
 	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
@@ -52,8 +59,6 @@ func run(quit chan int, sys *cpu, lcd *display) {
 	}
 	fmt.Printf("total ticks: %d\n", t)
 	fmt.Printf("%v\n", sys)
-
-	quit <- 0
 }
 
 func (sys *cpu) dump(w io.Writer) {

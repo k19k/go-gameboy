@@ -2,6 +2,7 @@ include $(GOROOT)/src/Make.inc
 
 TARG=gameboy
 GOFILES=\
+	rom.go\
 	memory.go\
 	cpu.go\
 	display.go\

@@ -12,11 +12,12 @@ func main() {
 		return
 	}
 
-	ch, err := gameboy.Start(os.Args[1])
+	quit := make(chan int)
+	err := gameboy.Start(quit, os.Args[1])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err);
+		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err);
 		return
 	}
 
-	<-ch
+	<-quit
 }
