@@ -215,12 +215,12 @@ func (sys *cpu) adc(x byte) {
 	if sys.fc {
 		fc = 1
 	}
-	y := sys.a + x + fc
-	sys.fz = y == 0
+	y := int(sys.a) + int(x) + int(fc)
+	sys.fz = byte(y) == 0
 	sys.fn = false
-	sys.fh = y&0x0F < sys.a&0x0F
-	sys.fc = y < sys.a
-	sys.a = y
+	sys.fh = sys.a&0x0F+x&0x0F+fc > 0x0F
+	sys.fc = y > 0xFF
+	sys.a = byte(y)
 }
 
 func (sys *cpu) sub(x byte) {
@@ -237,12 +237,12 @@ func (sys *cpu) sbc(x byte) {
 	if sys.fc {
 		fc = 1
 	}
-	y := sys.a - x - fc
+	y := int(sys.a) - int(x) - int(fc)
 	sys.fz = y == 0
 	sys.fn = true
-	sys.fh = y&0x0F > sys.a&0x0F
-	sys.fc = y > sys.a
-	sys.a = y
+	sys.fh = sys.a&0x0F < x&0x0F+fc
+	sys.fc = y < 0
+	sys.a = byte(y)
 }
 
 func (sys *cpu) and(x byte) {
@@ -306,7 +306,7 @@ func (sys *cpu) rl(x byte) byte {
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x&1 == 1
+	sys.fc = x&0x80 == 0x80
 	return y
 }
 
@@ -319,7 +319,7 @@ func (sys *cpu) rr(x byte) byte {
 	sys.fz = y == 0
 	sys.fn = false
 	sys.fh = false
-	sys.fc = x&0x80 == 0x80
+	sys.fc = x&0x01 == 0x01
 	return y
 }
 
