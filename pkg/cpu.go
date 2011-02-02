@@ -139,7 +139,7 @@ func (sys *cpu) jr(pred bool) int {
 	x := sys.fetchByte()
 	if pred {
 		sys.pc += uint16(int8(x))
-		return 12 / 4
+		return 3
 	}
 	return 2
 }
@@ -147,7 +147,7 @@ func (sys *cpu) jr(pred bool) int {
 func (sys *cpu) ret(pred bool) int {
 	if pred {
 		sys.pc = sys.pop()
-		return 20 / 4
+		return 5
 	}
 	return 2
 }
@@ -156,7 +156,7 @@ func (sys *cpu) jp(pred bool) int {
 	x := sys.fetchWord()
 	if pred {
 		sys.pc = x
-		return 16 / 4
+		return 4
 	}
 	return 3
 }
@@ -166,7 +166,7 @@ func (sys *cpu) call(pred bool) int {
 	if pred {
 		sys.push(sys.pc)
 		sys.pc = x
-		return 24 / 4
+		return 6
 	}
 	return 3
 }
