@@ -8,6 +8,8 @@ import (
 	"os/signal"
 )
 
+var saveDir = "." 		// TODO configure
+
 func Start(quit chan int, path string) (err interface{}) {
 	var rom romImage
 	rom, err = loadROM(path)
@@ -15,8 +17,8 @@ func Start(quit chan int, path string) (err interface{}) {
 
 	fmt.Printf("Loaded ROM image '%s'\n", rom.title())
 	fmt.Printf("Logo match: %t\n", rom.checkLogo())
-	fmt.Printf("Header checksum: %t\n", rom.headerChecksum())
-	fmt.Printf("Global checksum: %t\n", rom.globalChecksum())
+	fmt.Printf("Header checksum: %t\n", rom.doHeaderChecksum())
+	fmt.Printf("Global checksum: %t\n", rom.doGlobalChecksum())
 
 	if mbc, e := rom.mbcType(); e == nil {
 		fmt.Printf("MBC: %d\n", mbc)
@@ -31,11 +33,18 @@ func Start(quit chan int, path string) (err interface{}) {
 	mem, err = newMemory(rom)
 	if err != nil { return }
 
+	if e := mem.load(saveDir); e != nil {
+		fmt.Fprintf(os.Stderr, "load failed: %v\n", e)
+	}
+
 	sys := newCPU(mem)
 	lcd := newDisplay(mem)
 
 	go func() {
 		run(sys, lcd)
+		if e := mem.save(saveDir); e != nil {
+			fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
+		}
 		quit <- 1
 	}()
 	return

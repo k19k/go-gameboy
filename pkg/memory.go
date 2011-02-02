@@ -3,6 +3,9 @@ package gameboy
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"path"
 	"sdl"
 )
 
@@ -440,4 +443,63 @@ func (m *memory) pumpEvents() {
 			}
 		}
 	}
+}
+
+func (m *memory) save(dir string) os.Error {
+	if !m.rom.hasBattery() {
+		return nil
+	}
+
+	name := m.saveName()
+	file := path.Join(dir, name)
+	size := m.rom.ramSize()
+	switch m.mbcType {
+	case mbc2:
+		return ioutil.WriteFile(file, m.eram[0:512], 0644)
+	case mbc3:
+		if size == 0 {
+			return nil
+		}
+		fallthrough
+	default:
+		return ioutil.WriteFile(file, m.eram[0:size], 0644)
+	}
+	return nil
+}
+
+func (m *memory) load(dir string) interface{} {
+	if !m.rom.hasBattery() {
+		return nil
+	}
+
+	name := m.saveName()
+	file := path.Join(dir, name)
+	size := m.rom.ramSize()
+
+	if m.mbcType == mbc3 && size == 0 {
+		return nil
+	} else if m.mbcType == mbc2 {
+		size = 512
+	}
+
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
+
+	if len(data) != size {
+		return fmt.Sprintf("save should be %d bytes (%d found)",
+			size, len(data))
+	}
+
+	for i := 0; i < size; i++ {
+		m.eram[i] = data[i]
+	}
+
+	return nil
+}
+
+func (m *memory) saveName() string {
+	return fmt.Sprintf("%s-%02X-%04X.battery",
+		m.rom.title(), m.rom.headerChecksum(), m.rom.globalChecksum())
 }

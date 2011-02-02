@@ -42,8 +42,13 @@ func (rom romImage) checkLogo() bool {
 }
 
 func (rom romImage) title() string {
-	// TODO is there a better way to do this?
-	return bytes.NewBuffer(rom[0x0134:0x0144]).String()
+	raw := []byte(rom)
+	for i := 0x0134; i < 0x0144; i++ {
+		if rom[i] == 0 {
+			return string(raw[0x0134:i])
+		}
+	}
+	return string(raw[0x0134:0x0144])
 }
 
 func (rom romImage) mbcType() (mbc int, err interface{}) {
@@ -122,21 +127,30 @@ func (rom romImage) ramSize() int {
 	return 0
 }
 
-func (rom romImage) headerChecksum() bool {
+func (rom romImage) headerChecksum() byte {
 	var x byte
 	for i := 0x0134; i < 0x014D; i++ {
 		x = x - rom[i] - 1
 	}
-	return x == rom[0x014D]
+	return x
 }
 
-func (rom romImage) globalChecksum() bool {
+func (rom romImage) doHeaderChecksum() bool {
+	return rom.headerChecksum() == rom[0x014D]
+}
+
+func (rom romImage) globalChecksum() uint16 {
 	var x uint16
 	for i,b := range(rom) {
 		if i != 0x014E && i != 0x014F {
 			x += uint16(b)
 		}
 	}
+	return x
+}
+
+func (rom romImage) doGlobalChecksum() bool {
+	x := rom.globalChecksum()
 	return byte(x >> 8) == rom[0x014E] &&
 		byte(x) == rom[0x014F]
 }
