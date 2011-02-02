@@ -3,12 +3,24 @@ package gameboy
 import (
 	"fmt"
 	"io"
+	"path"
 	"sdl"
 	"os"
 	"os/signal"
 )
 
-var saveDir = "." 		// TODO configure
+var dotCmdName = ".gogb"
+var saveDir = "."
+
+func init() {
+	home := os.Getenv("HOME")
+	if len(home) > 0 {
+		save := path.Join(home, dotCmdName, "sav")
+		if err := os.MkdirAll(save, 0755); err == nil {
+			saveDir = save
+		}
+	}
+}
 
 func Start(quit chan int, path string) (err interface{}) {
 	var rom romImage
