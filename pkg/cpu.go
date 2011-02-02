@@ -1506,6 +1506,7 @@ func init() {
 		},
 		0xF9: func(sys *cpu) int { // LD SP,HL
 			sys.sp = sys.hl
+			sys.stack = sys.sp
 			return 2
 		},
 		0xFA: func(sys *cpu) int { // LD A,(a16)
