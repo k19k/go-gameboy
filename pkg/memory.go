@@ -97,6 +97,11 @@ type memory struct {
 	hblankInterrupt bool
 	lcdMode         byte
 
+	// LCD registers
+	ly       byte
+	scy, scx byte
+	wy, wx   byte
+
 	// Counter used by the GPU
 	clock int
 
@@ -336,8 +341,17 @@ func (m *memory) writePort(addr uint16, x byte) {
 		m.hblankInterrupt = x&0x08 != 0
 		m.lcdMode = x & 0x03
 	case portLY:
+		m.ly = 0
 		m.clock = 0
 		x = 0
+	case portSCY:
+		m.scy = x
+	case portSCX:
+		m.scx = x
+	case portWY:
+		m.wy = x
+	case portWX:
+		m.wx = x
 	case portBGP:
 		m.bgp[0] = x & 3
 		m.bgp[1] = (x >> 2) & 3
