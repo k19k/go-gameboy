@@ -13,6 +13,8 @@ type cpu struct {
 	ime, halt, pause bool
 	mar uint16
 	stack uint16
+	trace [256]uint16
+	traceptr byte
 }
 
 func newCPU(m *memory) *cpu {
@@ -36,8 +38,17 @@ func (sys *cpu) String() string {
 func (sys *cpu) step() int {
 	t := 4
 	if !sys.halt {
+		if sys.pc >= 0x8000 && sys.pc < 0xFF80 &&
+			sys.pc < 0xC000 && sys.pc >= 0xFE00 {
+			panic("executing data")
+		}
+		if sys.stack - sys.sp >= 0x7E {
+			panic("stack overflow")
+		}
 		sys.mar = sys.pc
-		//fmt.Printf("%04X %s\n", sys.pc, sys.Disasm(sys.pc))
+		sys.trace[sys.traceptr] = sys.pc
+		sys.traceptr++
+		//fmt.Printf("%04X %s\n", sys.pc, sys.disasm(sys.pc))
 		t = sys.fdx()
 	}
 	if sys.ime {
@@ -85,7 +96,10 @@ func (sys *cpu) dumpStack(w io.Writer) {
 		}()
 		return sys.readWord(addr), e
 	}
-	fmt.Fprintln(w, "STACK ┬")
+	fmt.Fprintf(w, "STACK ┬  %04X\n", sys.stack)
+	if sys.stack == sys.sp {
+		fmt.Fprintln(w, "      ┴  (empty)")
+	}
 	for addr >= sys.sp {
 		if addr == sys.sp {
 			fmt.Fprintf(w, "   SP ╰→ ")
@@ -99,6 +113,16 @@ func (sys *cpu) dumpStack(w io.Writer) {
 		} else {
 			fmt.Fprintf(w, "%04Xh\n", x)
 		}
+	}
+	fmt.Fprintln(w)
+}
+
+func (sys *cpu) traceback(w io.Writer) {
+	fmt.Fprintln(w, "EXECUTION TRACE")
+	for i := 255; i >= 0; i-- {
+		addr := sys.trace[sys.traceptr]
+		fmt.Fprintf(w, "%3d %04X %s\n", i, addr, sys.disasm(addr))
+		sys.traceptr++
 	}
 	fmt.Fprintln(w)
 }
@@ -785,7 +809,7 @@ func (sys *cpu) fdx() int {
 		return 12/4
 	case 0xD2:		// JP NC,a16
 		return sys.jp(!sys.fc)
-	case 0xD3: panic("sys: invalid opcode 0xD3")
+	case 0xD3: panic("cpu: invalid opcode 0xD3")
 	case 0xD4: 		// CALL NC,a16
 		return sys.call(!sys.fc)
 	case 0xD5:		// PUSH DE
@@ -804,10 +828,10 @@ func (sys *cpu) fdx() int {
 		return 16/4
 	case 0xDA:		// JP C,a16
 		return sys.jp(sys.fc)
-	case 0xDB: panic("sys: invalid opcode 0xDB")
+	case 0xDB: panic("cpu: invalid opcode 0xDB")
 	case 0xDC:		// CALL C,a16
 		return sys.call(sys.fc)
-	case 0xDD: panic("sys: invalid opcode 0xDD")
+	case 0xDD: panic("cpu: invalid opcode 0xDD")
 	case 0xDE:		// SBC d8
 		sys.sbc(sys.fetchByte())
 		return 8/4
@@ -825,8 +849,8 @@ func (sys *cpu) fdx() int {
 		addr := 0xFF00 + uint16(sys.c)
 		sys.writePort(addr, sys.a)
 		return 8/4
-	case 0xE3: panic("sys: invalid opcode 0xE3")
-	case 0xE4: panic("sys: invalid opcode 0xE4")
+	case 0xE3: panic("cpu: invalid opcode 0xE3")
+	case 0xE4: panic("cpu: invalid opcode 0xE4")
 	case 0xE5:		// PUSH HL
 		sys.push(sys.hl)
 		return 16/4
@@ -845,9 +869,9 @@ func (sys *cpu) fdx() int {
 	case 0xEA:		// LD (a16),A
 		sys.writeByte(sys.fetchWord(), sys.a)
 		return 16/4
-	case 0xEB: panic("sys: invalid opcode 0xEB")
-	case 0xEC: panic("sys: invalid opcode 0xEC")
-	case 0xED: panic("sys: invalid opcode 0xED")
+	case 0xEB: panic("cpu: invalid opcode 0xEB")
+	case 0xEC: panic("cpu: invalid opcode 0xEC")
+	case 0xED: panic("cpu: invalid opcode 0xED")
 	case 0xEE:		// XOR d8
 		sys.xor(sys.fetchByte())
 		return 8/4
@@ -868,7 +892,7 @@ func (sys *cpu) fdx() int {
 	case 0xF3:		// DI
 		sys.ime = false
 		return 4/4
-	case 0xF4: panic("sys: invalid opcode 0xF4")
+	case 0xF4: panic("cpu: invalid opcode 0xF4")
 	case 0xF5:		// PUSH AF
 		sys.push(sys.af())
 		return 16/4
@@ -890,8 +914,8 @@ func (sys *cpu) fdx() int {
 	case 0xFB:		// EI
 		sys.ime = true
 		return 4/4
-	case 0xFC: panic("sys: invalid opcode 0xFC")
-	case 0xFD: panic("sys: invalid opcode 0xFD")
+	case 0xFC: panic("cpu: invalid opcode 0xFC")
+	case 0xFD: panic("cpu: invalid opcode 0xFD")
 	case 0xFE: 		// CP d8
 		sys.cp(sys.fetchByte())
 		return 8/4

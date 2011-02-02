@@ -76,6 +76,7 @@ func run(cfg *Config, sys *cpu, lcd *display) {
 		t += s
 	}
 	if cfg.Debug {
+		sys.dump(os.Stderr)
 		fmt.Printf("total ticks: %d\n", t)
 		fmt.Printf("%v\n", sys)
 	}
@@ -100,5 +101,6 @@ func (sys *cpu) dump(w io.Writer) {
 		"%v\n\n",
 		sys.mar, sys.disasm(sys.mar), sys)
 	sys.dumpStack(w)
+	sys.traceback(w)
 	sys.memory.dump(w)
 }
