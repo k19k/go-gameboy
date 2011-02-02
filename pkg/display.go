@@ -22,39 +22,39 @@ const (
 	displayW = tileW * tilesX
 	displayH = tileH * tilesY
 
-	scale = 3
-
-	screenW = displayW * scale
-	screenH = displayH * scale
-
 	hblankTicks = 204 / 4
 	vblankTicks = 4560 / 4
 	oamTicks    = 80 / 4
 	vramTicks   = 172 / 4
 
 	scanlineTicks = oamTicks + vramTicks + hblankTicks
-	refreshTicks  = scanlineTicks*screenH + vblankTicks
+	refreshTicks  = scanlineTicks*displayH + vblankTicks
 )
 
 type display struct {
 	*memory
 	*sdl.Surface
-	pal       []uint32
+	pal       [4]uint32
 	frameTime int64
+	screenW   int
+	screenH   int
 }
 
 func newDisplay(m *memory) *display {
 	sdl.WM_SetCaption(m.rom.title(), "")
-	screen := sdl.SetVideoMode(screenW, screenH, 0, sdl.DOUBLEBUF)
-	pal := make([]uint32, 4)
-	pal[0] = sdl.MapRGBA(screen.Format, 0x9B, 0xBC, 0x0F, 0)
-	pal[1] = sdl.MapRGBA(screen.Format, 0x8B, 0xAC, 0x0F, 0)
-	pal[2] = sdl.MapRGBA(screen.Format, 0x30, 0x62, 0x30, 0)
-	pal[3] = sdl.MapRGBA(screen.Format, 0x0F, 0x38, 0x0F, 0)
-	screen.FillRect(nil, pal[0])
-	screen.Flip()
-	time := time.Nanoseconds()
-	return &display{memory: m, Surface: screen, pal: pal, frameTime: time}
+	lcd := display{memory: m}
+	lcd.screenW = displayW * m.config.Scale
+	lcd.screenH = displayH * m.config.Scale
+	lcd.Surface = sdl.SetVideoMode(lcd.screenW, lcd.screenH, 0,
+		sdl.DOUBLEBUF)
+	lcd.pal[0] = sdl.MapRGBA(lcd.Format, 0x9B, 0xBC, 0x0F, 0)
+	lcd.pal[1] = sdl.MapRGBA(lcd.Format, 0x8B, 0xAC, 0x0F, 0)
+	lcd.pal[2] = sdl.MapRGBA(lcd.Format, 0x30, 0x62, 0x30, 0)
+	lcd.pal[3] = sdl.MapRGBA(lcd.Format, 0x0F, 0x38, 0x0F, 0)
+	lcd.FillRect(nil, lcd.pal[0])
+	lcd.Flip()
+	lcd.frameTime = time.Nanoseconds()
+	return &lcd
 }
 
 func (lcd *display) step(t int) {
@@ -141,8 +141,9 @@ func (lcd *display) scanline() {
 }
 
 func (lcd *display) rleline(map1 bool, x, xoff, yoff byte) {
-	r := &sdl.Rect{X: int16(x) * scale,
-		Y: int16(lcd.ly) * scale, W: scale, H: scale}
+	scale := int16(lcd.config.Scale)
+	r := &sdl.Rect{X: int16(x) * scale, Y: int16(lcd.ly) * scale,
+		W: uint16(scale), H: uint16(scale)}
 	y := lcd.ly + yoff
 	cur := lcd.mapAt(map1, int(x+xoff), int(y))
 	for x++; x < displayW; x++ {
@@ -151,9 +152,9 @@ func (lcd *display) rleline(map1 bool, x, xoff, yoff byte) {
 			lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
 			cur = b
 			r.X = int16(x) * scale
-			r.W = scale
+			r.W = uint16(scale)
 		} else {
-			r.W += scale
+			r.W += uint16(scale)
 		}
 	}
 	lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
@@ -201,7 +202,9 @@ func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
 	}
 	tile = tile*16 + tiley*2
 
-	rect := &sdl.Rect{Y: int16(lcd.ly) * scale, W: scale, H: scale}
+	scale := lcd.config.Scale
+	rect := &sdl.Rect{Y: int16(lcd.ly) * int16(scale),
+		W: uint16(scale), H: uint16(scale)}
 	for i := 0; i < 8; i++ {
 		xi := byte(x + i)
 		if xi > 248 { // xi < 0
@@ -225,7 +228,7 @@ func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
 		px |= ((lcd.vram[tile+1] >> bit) & 1) << 1
 		if px != 0 {
 			color := lcd.pal[lcd.obp[palidx][px]]
-			rect.X = int16(xi) * scale
+			rect.X = int16(xi) * int16(scale)
 			lcd.FillRect(rect, color)
 		}
 	}

@@ -12,6 +12,7 @@ type Config struct {
 	SaveDir string
 	Verbose bool
 	Debug   bool
+	Scale   int
 }
 
 func Start(path string, cfg Config, quit chan int) (err interface{}) {
@@ -31,7 +32,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	}
 
 	var mem *memory
-	mem, err = newMemory(rom)
+	mem, err = newMemory(rom, &cfg)
 	if err != nil {
 		return
 	}

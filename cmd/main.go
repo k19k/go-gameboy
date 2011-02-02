@@ -24,6 +24,12 @@ func main() {
 		return
 	}
 
+	// The bounds are arbitrary, but seem more than reasonable.
+	if config.Scale < 1 || config.Scale > 6 {
+		fmt.Printf("unlikely scaling factor: %dx\n", config.Scale)
+		return
+	}
+
 	if err := os.MkdirAll(config.SaveDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
 		return
@@ -45,4 +51,5 @@ func init() {
 		"where to store save files")
 	flag.BoolVar(&config.Verbose, "v", false, "print verbose output")
 	flag.BoolVar(&config.Debug, "debug", false, "print debug messages")
+	flag.IntVar(&config.Scale, "scale", 2, "display scaling factor")
 }

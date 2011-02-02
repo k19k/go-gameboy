@@ -80,6 +80,8 @@ type memory struct {
 
 	mbcType int
 
+	config *Config
+
 	// LCDC flags
 	lcdEnable    bool
 	windowMap    bool
@@ -116,8 +118,9 @@ type memory struct {
 	obp [2][4]byte
 }
 
-func newMemory(rom romImage) (m *memory, err interface{}) {
-	m = &memory{rom: rom, romBank: 1, dpadBits: 0xF, btnBits: 0xF}
+func newMemory(rom romImage, cfg *Config) (m *memory, err interface{}) {
+	m = &memory{rom: rom, romBank: 1, config: cfg,
+		dpadBits: 0xF, btnBits: 0xF}
 	m.mbcType, err = rom.mbcType()
 	if err != nil {
 		return
