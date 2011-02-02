@@ -373,7 +373,7 @@ func (sys *cpu) swap(x byte) byte {
 }
 
 func (sys *cpu) bit(n, x byte) {
-	sys.fz = x&(1<<n) != 0
+	sys.fz = x&(1<<n) == 0
 	sys.fn = false
 	sys.fh = true
 }
