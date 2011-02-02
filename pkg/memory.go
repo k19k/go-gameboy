@@ -239,28 +239,52 @@ func (m *memory) readROM(addr uint16) byte {
 func (m *memory) writeROM(addr uint16, x byte) {
 	switch {
 	case addr >= 0x6000:
-		m.ramMode = x & 1 == 1
-		if m.ramMode {
-			m.romBank &= 0x1F
-		} else {
-			m.eramBank = 0
+		switch m.mbcType {
+		case mbc1:
+			m.ramMode = x & 1 == 1
+			if m.ramMode {
+				m.romBank &= 0x1F
+			} else {
+				m.eramBank = 0
+			}
+		case mbc3:
+			// TODO RTC latch
 		}
 	case addr >= 0x4000:
-		if m.ramMode {
-			m.eramBank = uint16(x) & 3
-		} else {
-			m.romBank &= 0x1F
-			m.romBank |= (int(x) & 3) << 5
-			//fmt.Printf("rom.56 = %x (%02x)\n", x, m.romBank)
+		switch m.mbcType {
+		case mbc1:
+			if m.ramMode {
+				m.eramBank = uint16(x) & 3
+			} else {
+				m.romBank &= 0x1F
+				m.romBank |= (int(x) & 3) << 5
+			}
+		case mbc3:
+			if m.ramMode {
+				m.eramBank = uint16(x) & 3
+			} else {
+				// TODO RTC register select
+			}
 		}
 	case addr >= 0x2000:
-		x &= 0x1F
-		if x == 0 { x = 1 }
-		m.romBank &= 0x60
-		m.romBank |= int(x)
-		//fmt.Printf("rom.01234 = %x (%02x)\n", x & 0x1F, m.romBank)
+		switch m.mbcType {
+		case mbc1:
+			x &= 0x1F
+			if x == 0 { x++ }
+			m.romBank &= 0x60
+			m.romBank |= int(x)
+		case mbc2:
+			if addr & 0x0100 != 0 {
+				x &= 0x0F
+				if x == 0 { x++ }
+				m.romBank = int(x)
+			}
+		case mbc3:
+			x &= 0x7F
+			if x == 0 { x++ }
+			m.romBank = int(x)
+		}
 	}
-	//fmt.Printf("ROM BANK = %d   RAM BANK = %d\n", m.romBank, m.eramBank)
 }
 
 func (m *memory) readVideoRAM(addr uint16) byte {
