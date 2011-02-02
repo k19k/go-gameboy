@@ -105,6 +105,5 @@ func (sys *cpu) dump(w io.Writer) {
 			"%v\n\n",
 		sys.mar, sys.disasm(sys.mar), sys)
 	sys.dumpStack(w)
-	sys.traceback(w)
 	sys.memory.dump(w)
 }

@@ -13,8 +13,6 @@ type cpu struct {
 	ime, halt, pause bool
 	mar              uint16
 	stack            uint16
-	trace            [256]uint16
-	traceptr         byte
 }
 
 var fdxTable, fdxTableCB [256]func(*cpu) int
@@ -44,12 +42,7 @@ func (sys *cpu) step() int {
 			sys.pc < 0xC000 && sys.pc >= 0xFE00 {
 			panic("executing data")
 		}
-		if sys.stack-sys.sp >= 0x7E {
-			panic("stack overflow")
-		}
 		sys.mar = sys.pc
-		sys.trace[sys.traceptr] = sys.pc
-		sys.traceptr++
 		//fmt.Printf("%04X %s\n", sys.pc, sys.disasm(sys.pc))
 		t = sys.fdx()
 	}
@@ -115,16 +108,6 @@ func (sys *cpu) dumpStack(w io.Writer) {
 		} else {
 			fmt.Fprintf(w, "%04Xh\n", x)
 		}
-	}
-	fmt.Fprintln(w)
-}
-
-func (sys *cpu) traceback(w io.Writer) {
-	fmt.Fprintln(w, "EXECUTION TRACE")
-	for i := 255; i >= 0; i-- {
-		addr := sys.trace[sys.traceptr]
-		fmt.Fprintf(w, "%3d %04X %s\n", i, addr, sys.disasm(addr))
-		sys.traceptr++
 	}
 	fmt.Fprintln(w)
 }
