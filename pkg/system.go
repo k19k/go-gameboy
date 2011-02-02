@@ -81,7 +81,6 @@ func run(cfg *Config, sys *cpu, lcd *display) {
 		t += s
 	}
 	if cfg.Debug {
-		sys.dump(os.Stderr)
 		fmt.Printf("total ticks: %d\n", t)
 		fmt.Printf("%v\n", sys)
 	}
