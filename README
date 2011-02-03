@@ -1,0 +1,31 @@
+go-gameboy: a Game Boy emulator written in Go
+=============================================
+
+Very much a work in progress. At the moment some ROMs will not even
+make it past the title screen (or even get that far). The majority
+that I have tried do work however.
+
+The current fixed configuration uses these controls:
+
+  A Button: x
+  B Button: z
+  Start: return
+  Select: right shift
+  D-Pad: arrow keys
+
+Requirements
+
+  Go-SDL  https://github.com/banthar/Go-SDL
+
+Currently supported features:
+
+  - ROMs with MBC chips type 1, 2, or 3 (or none)
+  - SDL graphics and input
+  - Battery-backed RAM saving
+
+Some missing things:
+
+  - Sound emulation
+  - Configurable input
+  - MBC RTC support
+  - Other MBC types
