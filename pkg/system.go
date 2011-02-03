@@ -9,7 +9,6 @@ import (
 	"io"
 	"sdl"
 	"os"
-	"os/signal"
 )
 
 type Config struct {
@@ -49,7 +48,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	lcd := newDisplay(mem)
 
 	go func() {
-		run(&cfg, sys, lcd)
+		run(&cfg, sys, lcd, quit)
 		if e := mem.save(cfg.SaveDir); e != nil {
 			fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
 		}
@@ -58,7 +57,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	return
 }
 
-func run(cfg *Config, sys *cpu, lcd *display) {
+func run(cfg *Config, sys *cpu, lcd *display, quit chan int) {
 	defer sdl.Quit()
 	defer func() {
 		if e := recover(); e != nil {
@@ -73,21 +72,17 @@ func run(cfg *Config, sys *cpu, lcd *display) {
 
 	t := 0
 	for {
-		if sig, ok := <-signal.Incoming; ok {
-			if cfg.Verbose {
-				fmt.Printf("\nReceived %v, cleaning up\n", sig)
+		if t > refreshTicks {
+			t -= refreshTicks
+			if _, ok := <-quit; ok {
+				return
 			}
-			break
 		}
 		var s int
 		for s = 0; s < 10; s += sys.step() {
 		}
 		lcd.step(s)
 		t += s
-	}
-	if cfg.Debug {
-		fmt.Printf("total ticks: %d\n", t)
-		fmt.Printf("%v\n", sys)
 	}
 }
 
