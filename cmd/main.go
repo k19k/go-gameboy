@@ -47,29 +47,34 @@ func main() {
 		return
 	}
 
-	for {
-		select {
-		case <-quit:
-			return
-		case sig := <-signal.Incoming:
-			interrupt := true
-			if id, ok := sig.(signal.UnixSignal); ok {
-				if id != 2 { // SIGINT
-					interrupt = false
-				}
-			}
-			if interrupt {
-				if config.Verbose {
-					fmt.Printf("Caught %v, "+
-						"cleaning up...\n",
-						sig)
-				}
-				quit <- 1 // notify gameboy
-				<-quit    // wait for response
-				return
+	for wait(quit) {
+		// keep waiting (do nothing)
+	}
+}
+
+func wait(quit chan int) bool {
+	select {
+	case <-quit:
+		return false
+	case sig := <-signal.Incoming:
+		interrupt := true
+		if id, ok := sig.(signal.UnixSignal); ok {
+			if id != 2 { // SIGINT
+				interrupt = false
 			}
 		}
+		if interrupt {
+			if config.Verbose {
+				fmt.Printf("Caught %v, "+
+					"cleaning up...\n",
+					sig)
+			}
+			quit <- 1 // notify gameboy
+			<-quit    // wait for response
+			return false
+		}
 	}
+	return true
 }
 
 func init() {
