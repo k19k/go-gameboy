@@ -15,7 +15,8 @@ The current fixed configuration uses these controls:
 
 Requirements
 
-  Go-SDL  https://github.com/banthar/Go-SDL
+  Go-SDL (⚛sdl version)
+  https://github.com/0xe2-0x9a-0x9b/Go-SDL
 
 Currently supported features:
 

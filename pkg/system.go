@@ -7,7 +7,7 @@ package gameboy
 import (
 	"fmt"
 	"io"
-	"sdl"
+	"⚛sdl"
 	"os"
 )
 
@@ -47,6 +47,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	sys := newCPU(mem)
 	lcd := newDisplay(mem)
 
+	go mem.monitorEvents()
 	go func() {
 		run(&cfg, sys, lcd, quit)
 		if e := mem.save(cfg.SaveDir); e != nil {

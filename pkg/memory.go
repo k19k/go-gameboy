@@ -10,7 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"sdl"
+	"⚛sdl"
 )
 
 const (
@@ -412,51 +412,55 @@ func (m *memory) dma(src uint16) {
 	}
 }
 
-func (m *memory) pumpEvents() {
-	var ev sdl.Event
-	for ev.Poll() {
-		// TODO trigger interrupts
-		switch ev.Type {
-		case sdl.KEYUP:
-			kev := ev.Keyboard()
-			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:
-				m.dpadBits |= 0x08
-			case sdl.K_UP:
-				m.dpadBits |= 0x04
-			case sdl.K_LEFT:
-				m.dpadBits |= 0x02
-			case sdl.K_RIGHT:
-				m.dpadBits |= 0x01
-			case sdl.K_RETURN:
-				m.btnBits |= 0x08
-			case sdl.K_RSHIFT:
-				m.btnBits |= 0x04
-			case sdl.K_z:
-				m.btnBits |= 0x02
-			case sdl.K_x:
-				m.btnBits |= 0x01
-			}
-		case sdl.KEYDOWN:
-			kev := ev.Keyboard()
-			switch kev.Keysym.Sym {
-			case sdl.K_DOWN:
-				m.dpadBits &^= 0x08
-			case sdl.K_UP:
-				m.dpadBits &^= 0x04
-			case sdl.K_LEFT:
-				m.dpadBits &^= 0x02
-			case sdl.K_RIGHT:
-				m.dpadBits &^= 0x01
-			case sdl.K_RETURN:
-				m.btnBits &^= 0x08
-			case sdl.K_RSHIFT:
-				m.btnBits &^= 0x04
-			case sdl.K_z:
-				m.btnBits &^= 0x02
-			case sdl.K_x:
-				m.btnBits &^= 0x01
-			}
+func (m *memory) monitorEvents() {
+	for {
+		event := <-sdl.Events
+		if e, ok := event.(sdl.KeyboardEvent); ok {
+			m.updateKeys(e)
+		}
+	}
+}
+
+func (m *memory) updateKeys(ev sdl.KeyboardEvent) {
+	// TODO trigger interrupts
+	switch ev.Type {
+	case sdl.KEYUP:
+		switch ev.Keysym.Sym {
+		case sdl.K_DOWN:
+			m.dpadBits |= 0x08
+		case sdl.K_UP:
+			m.dpadBits |= 0x04
+		case sdl.K_LEFT:
+			m.dpadBits |= 0x02
+		case sdl.K_RIGHT:
+			m.dpadBits |= 0x01
+		case sdl.K_RETURN:
+			m.btnBits |= 0x08
+		case sdl.K_RSHIFT:
+			m.btnBits |= 0x04
+		case sdl.K_z:
+			m.btnBits |= 0x02
+		case sdl.K_x:
+			m.btnBits |= 0x01
+		}
+	case sdl.KEYDOWN:
+		switch ev.Keysym.Sym {
+		case sdl.K_DOWN:
+			m.dpadBits &^= 0x08
+		case sdl.K_UP:
+			m.dpadBits &^= 0x04
+		case sdl.K_LEFT:
+			m.dpadBits &^= 0x02
+		case sdl.K_RIGHT:
+			m.dpadBits &^= 0x01
+		case sdl.K_RETURN:
+			m.btnBits &^= 0x08
+		case sdl.K_RSHIFT:
+			m.btnBits &^= 0x04
+		case sdl.K_z:
+			m.btnBits &^= 0x02
+		case sdl.K_x:
+			m.btnBits &^= 0x01
 		}
 	}
 }

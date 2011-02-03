@@ -5,7 +5,7 @@
 package gameboy
 
 import (
-	"sdl"
+	"⚛sdl"
 	"time"
 )
 
@@ -112,7 +112,6 @@ func (lcd *display) step(t int) {
 		lcd.writePort(portIF, irq|0x01)
 		lcd.Flip()
 		lcd.delay()
-		lcd.pumpEvents()
 	}
 
 	lcd.writePort(portSTAT, stat)
