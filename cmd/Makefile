@@ -1,6 +1,6 @@
 include $(GOROOT)/src/Make.inc
 
-TARG=../gameboy
+TARG=../go-gameboy
 GOFILES=\
 	main.go
 PREREQ+=../pkg/_obj/gameboy.a
