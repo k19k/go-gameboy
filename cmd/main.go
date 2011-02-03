@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	dotCmdName = ".gogb"
+	dotCmdName = ".go-gameboy"
 )
 
 var config gameboy.Config
