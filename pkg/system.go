@@ -12,10 +12,12 @@ import (
 )
 
 type Config struct {
-	SaveDir string
-	Verbose bool
-	Debug   bool
-	Scale   int
+	SaveDir      string
+	Verbose      bool
+	Debug        bool
+	Scale        int
+	AudioFreq    int
+	AudioBuffers int
 }
 
 func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {

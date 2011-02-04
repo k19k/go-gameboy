@@ -82,4 +82,6 @@ func init() {
 	flag.BoolVar(&config.Verbose, "v", false, "print verbose output")
 	flag.BoolVar(&config.Debug, "debug", false, "print debug messages")
 	flag.IntVar(&config.Scale, "scale", 2, "display scaling factor")
+	flag.IntVar(&config.AudioFreq, "freq", 48000, "audio rate")
+	flag.IntVar(&config.AudioBuffers, "nbuf", 4, "audio buffers")
 }

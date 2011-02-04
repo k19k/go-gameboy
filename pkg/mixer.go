@@ -5,6 +5,7 @@
 package gameboy
 
 import (
+	"fmt"
 	"⚛sdl"
 	"⚛sdl/audio"
 )
@@ -162,7 +163,7 @@ type mixer struct {
 
 func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 	spec := audio.AudioSpec{
-		Freq:     48000,
+		Freq:     mem.config.AudioFreq,
 		Format:   audio.AUDIO_S16SYS,
 		Channels: 2,
 		Samples:  1024}
@@ -171,9 +172,21 @@ func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 		return nil, sdl.GetError()
 	}
 
+	if mem.config.AudioBuffers < 3 {
+		mem.config.AudioBuffers = 3
+	}
+
+	if mem.config.Verbose {
+		fmt.Println("Opened audio:")
+		fmt.Printf("  rate:        %dHz\n", spec.Freq)
+		fmt.Printf("  channels:    %d\n", spec.Channels)
+		fmt.Printf("  buffer size: %d samples\n", spec.Samples)
+		fmt.Printf("  buffers:     %d\n", mem.config.AudioBuffers)
+	}
+
 	mix = &mixer{AudioSpec: spec, memory: mem}
 
-	mix.buf = make([][]int16, 4)
+	mix.buf = make([][]int16, mem.config.AudioBuffers)
 	for i := 0; i < len(mix.buf); i++ {
 		mix.buf[i] = make([]int16, mix.Samples*2)
 	}
