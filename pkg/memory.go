@@ -43,6 +43,7 @@ const (
 	portNR50 = 0xFF24
 	portNR51 = 0xFF25
 	portNR52 = 0xFF26
+	portWAVE = 0xFF30
 	portLCDC = 0xFF40
 	portSTAT = 0xFF41
 	portSCY  = 0xFF42
@@ -292,9 +293,9 @@ func (m *memory) readPort(addr uint16) byte {
 		if m.audio.ch2.active {
 			x |= 0x02
 		}
-		// if m.audio.ch3.active {
-		// 	x |= 0x04
-		// }
+		if m.audio.ch3.active {
+			x |= 0x04
+		}
 		if m.audio.ch4.active {
 			x |= 0x08
 		}
@@ -357,7 +358,7 @@ func (m *memory) writePort(addr uint16, x byte) {
 		m.audio.ch1.init = x&0x80 == 0x80
 		m.audio.ch1.loop = x&0x40 == 0
 		freq := int(m.hram[portNR13-0xFF00])
-		freq |= (int(x) & 0x07) << 8
+		freq |= int(x&0x07) << 8
 		m.audio.ch1.freq = 131072 / (2048 - freq)
 	case portNR21:
 		m.audio.ch2.waveDuty = int(x >> 6)
@@ -377,8 +378,24 @@ func (m *memory) writePort(addr uint16, x byte) {
 		m.audio.ch2.init = x&0x80 == 0x80
 		m.audio.ch2.loop = x&0x40 == 0
 		freq := int(m.hram[portNR23-0xFF00])
-		freq |= (int(x) & 0x07) << 8
+		freq |= int(x&0x07) << 8
 		m.audio.ch2.freq = 131072 / (2048 - freq)
+	case portNR30:
+		m.audio.ch3.on = x&0x80 == 0x80
+	case portNR31:
+		m.audio.ch3.length = int(x)
+	case portNR32:
+		m.audio.ch3.level = int(x>>5) & 0x03
+	case portNR33:
+		freq := int(m.hram[portNR34-0xFF00]&0x07) << 8
+		freq |= int(x)
+		m.audio.ch3.freq = 65536 / (2048 - freq)
+	case portNR34:
+		m.audio.ch3.init = x&0x80 == 0x80
+		m.audio.ch3.loop = x&0x40 == 0
+		freq := int(m.hram[portNR33-0xFF00])
+		freq |= int(x&0x07) << 8
+		m.audio.ch3.freq = 65536 / (2048 - freq)
 	case portNR41:
 		m.audio.ch4.length = int(x & 0x3F)
 	case portNR42:
