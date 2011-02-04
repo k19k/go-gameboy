@@ -40,21 +40,21 @@ func main() {
 		return
 	}
 
-	quit := make(chan int)
-	err := gameboy.Start(args[0], config, quit)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
-		return
-	}
+	err := make(chan interface{})
+	out := make(chan int)
+	go gameboy.Start(args[0], config, out, err)
 
-	for wait(quit) {
+	for wait(out, err) {
 		// keep waiting (do nothing)
 	}
 }
 
-func wait(quit chan int) bool {
+func wait(out chan int, error chan interface{}) bool {
 	select {
-	case <-quit:
+	case err := <-error:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
+		}
 		return false
 	case sig := <-signal.Incoming:
 		interrupt := true
@@ -69,9 +69,7 @@ func wait(quit chan int) bool {
 					"cleaning up...\n",
 					sig)
 			}
-			quit <- 1 // notify gameboy
-			<-quit    // wait for response
-			return false
+			out <- 1 // notify gameboy
 		}
 	}
 	return true

@@ -86,30 +86,9 @@ type memory struct {
 
 	config *Config
 
-	// LCDC flags
-	lcdEnable    bool
-	windowMap    bool
-	windowEnable bool
-	tileData     bool
-	bgMap        bool
-	spriteSize   bool
-	spriteEnable bool
-	bgEnable     bool
-
-	// STAT flags
-	lycInterrupt    bool
-	oamInterrupt    bool
-	vblankInterrupt bool
-	hblankInterrupt bool
-	lcdMode         byte
-
-	// LCD registers
-	ly       byte
-	scy, scx byte
-	wy, wx   byte
-
-	// Counter used by the GPU
-	clock int
+	sys   *cpu
+	lcd   *display
+	audio *mixer
 
 	divTicks     int
 	timaTicks    int
@@ -117,31 +96,36 @@ type memory struct {
 
 	dpadBits byte
 	btnBits  byte
-
-	bgp [4]byte
-	obp [2][4]byte
 }
 
 func newMemory(rom romImage, cfg *Config) (m *memory, err interface{}) {
 	m = &memory{rom: rom, romBank: 1, config: cfg,
 		dpadBits: 0xF, btnBits: 0xF}
 	m.mbcType, err = rom.mbcType()
-	if err != nil {
-		return
-	}
+	return
+}
+
+func (m *memory) connect(sys *cpu, lcd *display, audio *mixer) {
+	m.sys = sys
+	m.lcd = lcd
+	m.audio = audio
+	m.initPorts()
+}
+
+func (m *memory) initPorts() {
 	m.writePort(portJOYP, 0x30)
 	m.writePort(portNR10, 0x80)
 	m.writePort(portNR11, 0xBF)
 	m.writePort(portNR12, 0xF3)
-	m.writePort(portNR14, 0xB4)
+	m.writePort(portNR14, 0x24) //0xB4)
 	m.writePort(portNR21, 0x3F)
-	m.writePort(portNR24, 0xBF)
+	m.writePort(portNR24, 0x2F) //0xBF)
 	m.writePort(portNR30, 0x7F)
 	m.writePort(portNR31, 0xFF)
 	m.writePort(portNR32, 0x9F)
 	m.writePort(portNR33, 0xBF)
 	m.writePort(portNR41, 0xFF)
-	m.writePort(portNR44, 0xBF)
+	m.writePort(portNR44, 0x2F) //0xBF)
 	m.writePort(portNR50, 0x77)
 	m.writePort(portNR51, 0xF3)
 	m.writePort(portNR52, 0xF1)
@@ -149,7 +133,6 @@ func newMemory(rom romImage, cfg *Config) (m *memory, err interface{}) {
 	m.writePort(portBGP, 0xFC)
 	m.writePort(portOBP0, 0xFF)
 	m.writePort(portOBP1, 0xFF)
-	return
 }
 
 func (m *memory) readByte(addr uint16) byte {
@@ -299,7 +282,24 @@ func (m *memory) writeOAM(addr uint16, x byte) {
 }
 
 func (m *memory) readPort(addr uint16) byte {
-	return m.hram[addr-0xFF00]
+	x := m.hram[addr-0xFF00]
+	switch addr {
+	case portNR52:
+		x &= 0x80
+		if m.audio.ch1.active {
+			x |= 0x01
+		}
+		if m.audio.ch2.active {
+			x |= 0x02
+		}
+		// if m.audio.ch3.active {
+		// 	x |= 0x04
+		// }
+		// if m.audio.ch4.active {
+		// 	x |= 0x08
+		// }
+	}
+	return x
 }
 
 func (m *memory) writePort(addr uint16, x byte) {
@@ -332,48 +332,113 @@ func (m *memory) writePort(addr uint16, x byte) {
 			m.timaOverflow = 64
 		}
 		m.timaTicks = 0
+	case portNR10:
+		m.audio.ch1.sweepTime = int(x>>4) & 3
+		m.audio.ch1.sweepDir = 1
+		if x&0x08 == 0x08 {
+			m.audio.ch1.sweepDir = -1
+		}
+		m.audio.ch1.sweepShift = uint(x & 3)
+	case portNR11:
+		m.audio.ch1.waveDuty = int(x >> 6)
+		m.audio.ch1.length = int(x & 0x3F)
+	case portNR12:
+		m.audio.ch1.volumeInit = int(x >> 4)
+		m.audio.ch1.volumeDir = 1
+		if x&0x04 == 0 {
+			m.audio.ch1.volumeDir = -1
+		}
+		m.audio.ch1.volumeTime = int(x & 0x07)
+	case portNR13:
+		freq := int(m.hram[portNR14-0xFF00]&0x07) << 8
+		freq |= int(x)
+		m.audio.ch1.freq = 131072 / (2048 - freq)
+	case portNR14:
+		m.audio.ch1.init = x&0x80 == 0x80
+		m.audio.ch1.loop = x&0x40 == 0
+		freq := int(m.hram[portNR13-0xFF00])
+		freq |= (int(x) & 0x07) << 8
+		m.audio.ch1.freq = 131072 / (2048 - freq)
+	case portNR21:
+		m.audio.ch2.waveDuty = int(x >> 6)
+		m.audio.ch2.length = int(x & 0x3F)
+	case portNR22:
+		m.audio.ch2.volumeInit = int(x >> 4)
+		m.audio.ch2.volumeDir = 1
+		if x&0x04 == 0 {
+			m.audio.ch2.volumeDir = -1
+		}
+		m.audio.ch1.volumeTime = int(x & 0x07)
+	case portNR23:
+		freq := int(m.hram[portNR24-0xFF00]&0x07) << 8
+		freq |= int(x)
+		m.audio.ch2.freq = 131072 / (2048 - freq)
+	case portNR24:
+		m.audio.ch2.init = x&0x80 == 0x80
+		m.audio.ch2.loop = x&0x40 == 0
+		freq := int(m.hram[portNR23-0xFF00])
+		freq |= (int(x) & 0x07) << 8
+		m.audio.ch2.freq = 131072 / (2048 - freq)
+	case portNR50:
+		//m.audio.vinL = x&0x80 == 0x80
+		m.audio.volL = int16(x&0x70) >> 4
+		//m.audio.vinR = x&0x08 == 0x08
+		m.audio.volR = int16(x & 0x07)
+	case portNR51:
+		m.audio.ch1L = int16(x) & 1
+		m.audio.ch2L = int16(x>>1) & 1
+		m.audio.ch3L = int16(x>>2) & 1
+		m.audio.ch4L = int16(x>>3) & 1
+		m.audio.ch1R = int16(x>>4) & 1
+		m.audio.ch2R = int16(x>>5) & 1
+		m.audio.ch3R = int16(x>>6) & 1
+		m.audio.ch4R = int16(x>>7) & 1
+	case portNR52:
+		enable := x&0x80 == 0x80
+		if enable != m.audio.enable {
+			m.audio.pause(!enable)
+		}
 	case portLCDC:
-		m.lcdEnable = x&0x80 != 0
-		m.windowMap = x&0x40 != 0
-		m.windowEnable = x&0x20 != 0
-		m.tileData = x&0x10 != 0
-		m.bgMap = x&0x08 != 0
-		m.spriteSize = x&0x04 != 0
-		m.spriteEnable = x&0x02 != 0
-		m.bgEnable = x&0x01 != 0
+		m.lcd.enable = x&0x80 != 0
+		m.lcd.windowMap = x&0x40 != 0
+		m.lcd.windowEnable = x&0x20 != 0
+		m.lcd.tileData = x&0x10 != 0
+		m.lcd.bgMap = x&0x08 != 0
+		m.lcd.spriteSize = x&0x04 != 0
+		m.lcd.spriteEnable = x&0x02 != 0
+		m.lcd.bgEnable = x&0x01 != 0
 	case portSTAT:
-		m.lycInterrupt = x&0x40 != 0
-		m.oamInterrupt = x&0x20 != 0
-		m.vblankInterrupt = x&0x10 != 0
-		m.hblankInterrupt = x&0x08 != 0
-		m.lcdMode = x & 0x03
+		m.lcd.lycInterrupt = x&0x40 != 0
+		m.lcd.oamInterrupt = x&0x20 != 0
+		m.lcd.vblankInterrupt = x&0x10 != 0
+		m.lcd.hblankInterrupt = x&0x08 != 0
 	case portLY:
-		m.ly = 0
-		m.clock = 0
+		m.lcd.ly = 0
+		m.lcd.clock = 0
 		x = 0
 	case portSCY:
-		m.scy = x
+		m.lcd.scy = x
 	case portSCX:
-		m.scx = x
+		m.lcd.scx = x
 	case portWY:
-		m.wy = x
+		m.lcd.wy = x
 	case portWX:
-		m.wx = x
+		m.lcd.wx = x
 	case portBGP:
-		m.bgp[0] = x & 3
-		m.bgp[1] = (x >> 2) & 3
-		m.bgp[2] = (x >> 4) & 3
-		m.bgp[3] = (x >> 6)
+		m.lcd.bgp[0] = x & 3
+		m.lcd.bgp[1] = (x >> 2) & 3
+		m.lcd.bgp[2] = (x >> 4) & 3
+		m.lcd.bgp[3] = (x >> 6)
 	case portOBP0:
-		m.obp[0][0] = x & 3
-		m.obp[0][1] = (x >> 2) & 3
-		m.obp[0][2] = (x >> 4) & 3
-		m.obp[0][3] = x >> 6
+		m.lcd.obp[0][0] = x & 3
+		m.lcd.obp[0][1] = (x >> 2) & 3
+		m.lcd.obp[0][2] = (x >> 4) & 3
+		m.lcd.obp[0][3] = x >> 6
 	case portOBP1:
-		m.obp[1][0] = x & 3
-		m.obp[1][1] = (x >> 2) & 3
-		m.obp[1][2] = (x >> 4) & 3
-		m.obp[1][3] = x >> 6
+		m.lcd.obp[1][0] = x & 3
+		m.lcd.obp[1][1] = (x >> 2) & 3
+		m.lcd.obp[1][2] = (x >> 4) & 3
+		m.lcd.obp[1][3] = x >> 6
 	case portDMA:
 		src := uint16(x) << 8
 		m.dma(src)

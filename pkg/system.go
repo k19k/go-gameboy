@@ -18,10 +18,15 @@ type Config struct {
 	Scale   int
 }
 
-func Start(path string, cfg Config, quit chan int) (err interface{}) {
+func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
 	var rom romImage
-	rom, err = loadROM(path)
-	if err != nil {
+	var err interface{}
+
+	defer func() {
+		out <- err
+	}()
+
+	if rom, err = loadROM(path); err != nil {
 		return
 	}
 
@@ -29,14 +34,14 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 		rom.printInfo()
 	}
 
-	if sdl.Init(sdl.INIT_VIDEO) != 0 {
+	if sdl.Init(sdl.INIT_VIDEO|sdl.INIT_AUDIO) != 0 {
 		err = sdl.GetError()
 		return
 	}
+	defer sdl.Quit()
 
 	var mem *memory
-	mem, err = newMemory(rom, &cfg)
-	if err != nil {
+	if mem, err = newMemory(rom, &cfg); err != nil {
 		return
 	}
 
@@ -44,22 +49,27 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 		fmt.Fprintf(os.Stderr, "load failed: %v\n", e)
 	}
 
+	var audio *mixer
+	if audio, err = NewMixer(mem); err != nil {
+		return
+	}
+	defer audio.close()
+
 	sys := newCPU(mem)
 	lcd := newDisplay(mem)
 
+	mem.connect(sys, lcd, audio)
+
 	go mem.monitorEvents()
-	go func() {
-		run(&cfg, sys, lcd, quit)
-		if e := mem.save(cfg.SaveDir); e != nil && cfg.Verbose {
-			fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
-		}
-		quit <- 1
-	}()
-	return
+
+	run(&cfg, sys, in)
+
+	if e := mem.save(cfg.SaveDir); e != nil && cfg.Verbose {
+		fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
+	}
 }
 
-func run(cfg *Config, sys *cpu, lcd *display, quit chan int) {
-	defer sdl.Quit()
+func run(cfg *Config, sys *cpu, in <-chan int) {
 	defer func() {
 		if e := recover(); e != nil {
 			if cfg.Debug {
@@ -73,16 +83,17 @@ func run(cfg *Config, sys *cpu, lcd *display, quit chan int) {
 
 	t := 0
 	for {
-		if t > refreshTicks {
-			t -= refreshTicks
-			if _, ok := <-quit; ok {
+		if t >= refreshTicks {
+			if _, ok := <-in; ok {
 				return
 			}
+			t = 0
 		}
 		var s int
 		for s = 0; s < 10; s += sys.step() {
 		}
-		lcd.step(s)
+		sys.lcd.step(s)
+		sys.audio.step(s)
 		t += s
 	}
 }

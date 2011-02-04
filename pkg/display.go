@@ -43,6 +43,33 @@ type display struct {
 	screenW   int
 	screenH   int
 
+	clock int
+
+	// LCDC flags
+	enable       bool
+	windowMap    bool
+	windowEnable bool
+	tileData     bool
+	bgMap        bool
+	spriteSize   bool
+	spriteEnable bool
+	bgEnable     bool
+
+	// STAT flags
+	lycInterrupt    bool
+	oamInterrupt    bool
+	vblankInterrupt bool
+	hblankInterrupt bool
+	mode            byte
+
+	// LCD registers
+	ly       byte
+	scy, scx byte
+	wy, wx   byte
+
+	bgp [4]byte
+	obp [2][4]byte
+
 	// Scanlines are rendered to here first, and then drawn to the
 	// display - rather than each layer accessing the display
 	// separately (which is slow).
@@ -81,10 +108,10 @@ func (lcd *display) step(t int) {
 	lcd.ly = byte(lcd.clock / scanlineTicks)
 	lcd.hram[portLY-0xFF00] = lcd.ly
 	mode := calcMode(lcd.clock, lcd.ly)
-	if mode == lcd.lcdMode {
+	if mode == lcd.mode {
 		return
 	}
-	lcd.lcdMode = mode
+	lcd.mode = mode
 
 	stat := lcd.readPort(portSTAT)&^3 | mode
 	irq := lcd.readPort(portIF)
@@ -103,7 +130,7 @@ func (lcd *display) step(t int) {
 			stat &^= 0x04
 		}
 	case modeVRAM:
-		if lcd.lcdEnable {
+		if lcd.enable {
 			lcd.scanline()
 		}
 	case modeHBlank:
@@ -116,7 +143,12 @@ func (lcd *display) step(t int) {
 		}
 		lcd.writePort(portIF, irq|0x01)
 		lcd.Flip()
-		lcd.delay()
+
+		// while audio is playing, we let it control the
+		// emulation speed
+		if !lcd.audio.enable {
+			lcd.delay()
+		}
 	}
 
 	lcd.writePort(portSTAT, stat)
