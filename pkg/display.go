@@ -135,6 +135,7 @@ func (lcd *display) delay() {
 func (lcd *display) scanline() {
 	for i := 0; i < displayW; i++ {
 		lcd.oamLineMask[i] = 0
+		lcd.lineBuf[i] = 0
 	}
 
 	if lcd.bgEnable {
