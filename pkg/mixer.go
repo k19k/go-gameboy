@@ -240,7 +240,7 @@ func (ch *wave) mix(buf []int16, onleft, onright int16, mem *memory) {
 		// TODO verify this
 		pos := uint16(ch.phase * 32 / ch.period)
 		sample := int(mem.readPort(portWAVE + pos>>1))
-		sample >>= 1 - pos&1<<2
+		sample >>= (1 - pos&1) << 2
 		sample &= 0x0F
 		if sample >= 8 {
 			sample -= 15
