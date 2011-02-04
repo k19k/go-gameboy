@@ -40,7 +40,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 		return
 	}
 
-	if e := mem.load(cfg.SaveDir); e != nil {
+	if e := mem.load(cfg.SaveDir); e != nil && cfg.Verbose {
 		fmt.Fprintf(os.Stderr, "load failed: %v\n", e)
 	}
 
@@ -50,7 +50,7 @@ func Start(path string, cfg Config, quit chan int) (err interface{}) {
 	go mem.monitorEvents()
 	go func() {
 		run(&cfg, sys, lcd, quit)
-		if e := mem.save(cfg.SaveDir); e != nil {
+		if e := mem.save(cfg.SaveDir); e != nil && cfg.Verbose {
 			fmt.Fprintf(os.Stderr, "save failed: %v\n", e)
 		}
 		quit <- 1
