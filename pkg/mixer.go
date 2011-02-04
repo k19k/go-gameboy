@@ -6,6 +6,7 @@ package gameboy
 
 import (
 	"fmt"
+	"rand"
 	"⚛sdl"
 	"⚛sdl/audio"
 )
@@ -24,25 +25,20 @@ const (
 var volstep []int16
 var mvolstep []int16
 
-type tone struct {
-	waveDuty   int
+type sound struct {
 	length     int
 	volumeInit int
 	volumeDir  int
 	volumeTime int
-	freq       int
 	loop       bool
 	init       bool
 
 	clock  int // incremented at 256Hz
-	period int
-	duty   int
-	phase  int
 	volume int
 	active bool
 }
 
-func (ch *tone) step(spec *audio.AudioSpec) {
+func (ch *sound) step() {
 	switch {
 	case ch.init:
 		ch.init = false
@@ -67,6 +63,21 @@ func (ch *tone) step(spec *audio.AudioSpec) {
 			}
 		}
 	}
+}
+
+type tone struct {
+	sound
+
+	waveDuty int
+	freq     int
+
+	period int
+	duty   int
+	phase  int
+}
+
+func (ch *tone) step(spec *audio.AudioSpec) {
+	ch.sound.step()
 
 	ch.calcPeriod(spec)
 }
@@ -133,6 +144,57 @@ func (ch *tonesweep) step(spec *audio.AudioSpec) {
 	}
 }
 
+type noise struct {
+	sound
+
+	shiftClockFreq   uint
+	counterStepWidth int
+	dividingRatio    int
+
+	afreq  int
+	freq   int
+	period int
+	phase  int
+	sign   int16
+}
+
+func (ch *noise) step() {
+	ch.sound.step()
+
+	freq := 524288
+	if ch.dividingRatio == 0 {
+		freq *= 2
+	} else {
+		freq /= ch.dividingRatio
+	}
+	freq /= 1 << ch.shiftClockFreq
+
+	ch.freq = freq
+}
+
+func (ch *noise) calcPeriod() {
+	// no, I am not sure this is right. Thank you for asking.
+	ch.period = int(rand.Int31()+1) & ch.counterStepWidth
+	ch.period = ch.period * ch.afreq / ch.freq
+}
+
+func (ch *noise) mix(buf []int16, onleft, onright int16) {
+	if ch.volume == 0 {
+		return
+	}
+	amp := volstep[ch.volume]
+	for f := 0; f < len(buf); f += 2 {
+		if ch.phase >= ch.period {
+			ch.phase = 0
+			ch.sign = -ch.sign
+			ch.calcPeriod()
+		}
+		buf[f] += amp * ch.sign * onleft
+		buf[f+1] += amp * ch.sign * onright
+		ch.phase++
+	}
+}
+
 type mixer struct {
 	audio.AudioSpec
 	*memory
@@ -159,6 +221,8 @@ type mixer struct {
 
 	ch1 tonesweep
 	ch2 tone
+	//ch3 wave
+	ch4 noise
 }
 
 func NewMixer(mem *memory) (mix *mixer, err interface{}) {
@@ -191,6 +255,9 @@ func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 		mix.buf[i] = make([]int16, mix.Samples*2)
 	}
 
+	mix.ch4.afreq = spec.Freq
+	mix.ch4.sign = 1
+
 	mix.send = make(chan []int16, len(mix.buf)-2)
 	mix.status = make(chan bool)
 	mix.quit = make(chan int)
@@ -216,7 +283,7 @@ func (mix *mixer) step(t int) {
 		mix.ch1.step(&mix.AudioSpec)
 		mix.ch2.step(&mix.AudioSpec)
 		//mix.ch3.step(&mix.AudioSpec)
-		//mix.ch4.step(&mix.AudioSpec)
+		mix.ch4.step()
 		mix.mix()
 	}
 }
@@ -250,6 +317,12 @@ func (mix *mixer) slice(frames uint) {
 	}
 	if mix.ch2.active {
 		mix.ch2.mix(buf, mix.ch2L, mix.ch2R)
+	}
+	// if mix.ch3.active {
+	// 	mix.ch3.mix(buf, mix.ch3L, mix.ch3R)
+	// }
+	if mix.ch4.active {
+		mix.ch4.mix(buf, mix.ch4L, mix.ch4R)
 	}
 
 	for f := 0; f < len(buf); f += 2 {
