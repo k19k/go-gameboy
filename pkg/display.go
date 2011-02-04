@@ -43,8 +43,13 @@ type display struct {
 	screenW   int
 	screenH   int
 
+	// Scanlines are rendered to here first, and then drawn to the
+	// display - rather than each layer accessing the display
+	// separately (which is slow).
+	lineBuf [displayW]byte
+
 	// When rendering a scanline this is zeroed out, then
-	// logical-ORed with the pixels from the BG and window.  This
+	// logical-ORed with the pixels from the BG and window. This
 	// is then used to lookup which pixels can be painted in
 	// sprites that are to be obscured by the background layers.
 	oamLineMask [displayW]byte
@@ -133,7 +138,7 @@ func (lcd *display) scanline() {
 	}
 
 	if lcd.bgEnable {
-		lcd.rleline(lcd.bgMap, byte(0), lcd.scx, lcd.scy)
+		lcd.mapline(lcd.bgMap, byte(0), lcd.scx, lcd.scy)
 	}
 
 	if lcd.windowEnable {
@@ -143,7 +148,7 @@ func (lcd *display) scanline() {
 			if x < 0 {
 				x = 0
 			}
-			lcd.rleline(lcd.windowMap, byte(x),
+			lcd.mapline(lcd.windowMap, byte(x),
 				byte(xoff), byte(-lcd.wy))
 		}
 	}
@@ -151,27 +156,37 @@ func (lcd *display) scanline() {
 	if lcd.spriteEnable {
 		lcd.oamline()
 	}
+
+	lcd.flushline()
 }
 
-func (lcd *display) rleline(map1 bool, x, xoff, yoff byte) {
-	scale := int16(lcd.config.Scale)
-	r := &sdl.Rect{X: int16(x) * scale, Y: int16(lcd.ly) * scale,
-		W: uint16(scale), H: uint16(scale)}
+func (lcd *display) mapline(map1 bool, x, xoff, yoff byte) {
 	y := lcd.ly + yoff
-	cur := lcd.mapAt(map1, int(x+xoff), int(y))
-	for x++; x < displayW; x++ {
+	for ; x < displayW; x++ {
 		b := lcd.mapAt(map1, int(x+xoff), int(y))
 		lcd.oamLineMask[x] |= b
+		lcd.lineBuf[x] = lcd.bgp[b]
+	}
+}
+
+func (lcd *display) flushline() {
+	// Do some simple run-length counting to reduce the number of
+	// FillRect calls we need to make.
+	scale := uint16(lcd.config.Scale)
+	r := &sdl.Rect{0, int16(lcd.ly) * int16(scale), scale, scale}
+	cur := lcd.lineBuf[0]
+	for x := 1; x < displayW; x++ {
+		b := lcd.lineBuf[x]
 		if b != cur {
-			lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
+			lcd.FillRect(r, lcd.pal[cur])
 			cur = b
-			r.X = int16(x) * scale
-			r.W = uint16(scale)
+			r.X = int16(x) * int16(scale)
+			r.W = scale
 		} else {
-			r.W += uint16(scale)
+			r.W += scale
 		}
 	}
-	lcd.FillRect(r, lcd.pal[lcd.bgp[cur]])
+	lcd.FillRect(r, lcd.pal[cur])
 }
 
 // oamline draws up to 10 sprites on the current scanline
@@ -216,9 +231,6 @@ func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
 	}
 	tile = tile*16 + tiley*2
 
-	scale := lcd.config.Scale
-	rect := &sdl.Rect{Y: int16(lcd.ly) * int16(scale),
-		W: uint16(scale), H: uint16(scale)}
 	for i := 0; i < 8; i++ {
 		xi := byte(x + i)
 		if xi >= displayW {
@@ -237,9 +249,7 @@ func (lcd *display) spriteLine(tile, x, y, h int, info byte) {
 		px := (lcd.vram[tile] >> bit) & 1
 		px |= ((lcd.vram[tile+1] >> bit) & 1) << 1
 		if px != 0 {
-			color := lcd.pal[lcd.obp[palidx][px]]
-			rect.X = int16(xi) * int16(scale)
-			lcd.FillRect(rect, color)
+			lcd.lineBuf[xi] = lcd.obp[palidx][px]
 		}
 	}
 }
