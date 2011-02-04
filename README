@@ -22,11 +22,11 @@ Currently supported features:
 
   - ROMs with MBC chips type 1, 2, or 3 (or none)
   - SDL graphics and input
+  - Sound emulation
   - Battery-backed RAM saving
 
 Some missing things:
 
-  - Sound emulation
   - Configurable input
   - MBC RTC support
   - Other MBC types
