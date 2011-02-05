@@ -407,11 +407,14 @@ func (mix *mixer) next() {
 }
 
 func runAudio(send <-chan []int16, status <-chan bool, quit chan int) {
+	pause := false
 	for {
 		select {
 		case buf := <-send:
-			audio.SendAudio_int16(buf)
-		case pause := <-status:
+			if !pause {
+				audio.SendAudio_int16(buf)
+			}
+		case pause = <-status:
 			audio.PauseAudio(pause)
 		case <-quit:
 			audio.CloseAudio()
