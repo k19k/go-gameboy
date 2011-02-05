@@ -6,7 +6,6 @@ package gameboy
 
 import (
 	"fmt"
-	"rand"
 	"⚛sdl"
 	"⚛sdl/audio"
 )
@@ -152,13 +151,19 @@ type noise struct {
 	counterStepWidth int
 	dividingRatio    int
 
-	afreq  int
-	freq   int
 	period int
 	sign   int16
+	lfsr7  uint
+	lfsr15 uint
 }
 
-func (ch *noise) step() {
+func (ch *noise) initialize() {
+	ch.sign = 1
+	ch.lfsr7 = 0x7F
+	ch.lfsr15 = 0x7FFF
+}
+
+func (ch *noise) step(afreq int) {
 	ch.sound.step()
 
 	freq := 524288
@@ -169,13 +174,24 @@ func (ch *noise) step() {
 	}
 	freq /= 1 << ch.shiftClockFreq
 
-	ch.freq = freq
+	ch.period = afreq / freq
 }
 
-func (ch *noise) calcPeriod() {
-	// no, I am not sure this is right. Thank you for asking.
-	ch.period = int(rand.Int31()+1) & ch.counterStepWidth
-	ch.period = ch.period * ch.afreq / ch.freq
+// Advances the linear feedback shift register (LFSR) one step, and
+// returns the output (1 or 0).
+func (ch *noise) steplfsr() (out uint) {
+	if ch.counterStepWidth == 7 {
+		out = ch.lfsr7 & 1
+		ch.lfsr7 >>= 1
+		rot := (ch.lfsr7 ^ out) & 1
+		ch.lfsr7 |= rot << 6
+	} else {
+		out = ch.lfsr15 & 1
+		ch.lfsr15 >>= 1
+		rot := (ch.lfsr15 ^ out) & 1
+		ch.lfsr15 |= rot << 14
+	}
+	return
 }
 
 func (ch *noise) mix(buf []int16, onleft, onright int16) {
@@ -186,8 +202,8 @@ func (ch *noise) mix(buf []int16, onleft, onright int16) {
 	for f := 0; f < len(buf); f += 2 {
 		if ch.phase >= ch.period {
 			ch.phase = 0
-			ch.sign = -ch.sign
-			ch.calcPeriod()
+			b := ch.steplfsr()
+			ch.sign = int16(b)*2 - 1
 		}
 		buf[f] += amp * ch.sign * onleft
 		buf[f+1] += amp * ch.sign * onright
@@ -318,8 +334,7 @@ func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 		mix.buf[i] = make([]int16, mix.Samples*2)
 	}
 
-	mix.ch4.afreq = spec.Freq
-	mix.ch4.sign = 1
+	mix.ch4.initialize()
 
 	mix.send = make(chan []int16, len(mix.buf)-2)
 	mix.status = make(chan bool)
@@ -347,7 +362,7 @@ func (mix *mixer) step(t int) {
 		mix.ch1.step(mix.Freq)
 		mix.ch2.step(mix.Freq)
 		mix.ch3.step(mix.Freq)
-		mix.ch4.step()
+		mix.ch4.step(mix.Freq)
 		mix.mix()
 	}
 }
