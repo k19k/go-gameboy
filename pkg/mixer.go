@@ -120,7 +120,7 @@ func (ch *tone) mix(buf []int16, onleft, onright int16) {
 			buf[f+1] += amp * onright
 		} else {
 			buf[f] += -amp * onleft
-			buf[f+1] += -amp * onleft
+			buf[f+1] += -amp * onright
 		}
 		ch.phase++
 	}
