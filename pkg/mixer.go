@@ -293,7 +293,7 @@ func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 		Freq:     mem.config.AudioFreq,
 		Format:   audio.AUDIO_S16SYS,
 		Channels: 2,
-		Samples:  1024}
+		Samples:  2048}
 
 	if audio.OpenAudio(&spec, &spec) != 0 {
 		return nil, sdl.GetError()
