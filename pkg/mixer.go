@@ -332,6 +332,7 @@ func NewMixer(mem *memory) (mix *mixer, err interface{}) {
 
 func (mix *mixer) close() {
 	mix.quit <- 1
+	<-mix.quit // wait for audio thread to finish
 }
 
 func (mix *mixer) pause(on bool) {
@@ -405,7 +406,7 @@ func (mix *mixer) next() {
 	mix.frame = 0
 }
 
-func runAudio(send <-chan []int16, status <-chan bool, quit <-chan int) {
+func runAudio(send <-chan []int16, status <-chan bool, quit chan int) {
 	for {
 		select {
 		case buf := <-send:
@@ -414,6 +415,7 @@ func runAudio(send <-chan []int16, status <-chan bool, quit <-chan int) {
 			audio.PauseAudio(pause)
 		case <-quit:
 			audio.CloseAudio()
+			quit <- 1
 			return
 		}
 	}
