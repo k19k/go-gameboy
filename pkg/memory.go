@@ -80,6 +80,7 @@ type memory struct {
 	hram [0x100]byte
 
 	romBank  int
+	romBanks int
 	eramBank uint16
 	ramMode  bool
 
@@ -103,6 +104,10 @@ func newMemory(rom romImage, cfg *Config) (m *memory, err interface{}) {
 	m = &memory{rom: rom, romBank: 1, config: cfg,
 		dpadBits: 0xF, btnBits: 0xF}
 	m.mbcType, err = rom.mbcType()
+	if err != nil {
+		return
+	}
+	m.romBanks, err = rom.banks()
 	return
 }
 
@@ -215,6 +220,7 @@ func (m *memory) writeROM(addr uint16, x byte) {
 			} else {
 				m.romBank &= 0x1F
 				m.romBank |= (int(x) & 3) << 5
+				m.romBank %= m.romBanks
 			}
 		case mbc3:
 			if m.ramMode {
@@ -232,6 +238,7 @@ func (m *memory) writeROM(addr uint16, x byte) {
 			}
 			m.romBank &= 0x60
 			m.romBank |= int(x)
+			m.romBank %= m.romBanks
 		case mbc2:
 			if addr&0x0100 != 0 {
 				x &= 0x0F

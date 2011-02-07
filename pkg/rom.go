@@ -132,7 +132,7 @@ func (rom romImage) hasBattery() bool {
 	return false
 }
 
-func (rom romImage) banks() (n int, err string) {
+func (rom romImage) banks() (n int, err interface{}) {
 	switch rom[0x0148] {
 	case 0x00:
 		n = 0
