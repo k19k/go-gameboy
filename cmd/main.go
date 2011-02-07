@@ -84,4 +84,11 @@ func init() {
 	flag.IntVar(&config.Scale, "scale", 2, "display scaling factor")
 	flag.IntVar(&config.AudioFreq, "freq", 48000, "audio rate")
 	flag.IntVar(&config.AudioBuffers, "nbuf", 4, "audio buffers")
+	flag.IntVar(&config.Joystick, "joystick", 0, "which joystick to use")
+	flag.IntVar(&config.JoyButtonA, "joy-a", 1, "joystick A button")
+	flag.IntVar(&config.JoyButtonB, "joy-b", 0, "joystick B button")
+	flag.IntVar(&config.JoyButtonStart, "joy-start", 6, "joystick start button")
+	flag.IntVar(&config.JoyButtonSelect, "joy-select", 10, "joystick select button")
+	flag.IntVar(&config.JoyAxisX, "joy-x", 0, "joystick x-axis (for d-pad)")
+	flag.IntVar(&config.JoyAxisY, "joy-y", 1, "joystick y-axis (for d-pad)")
 }

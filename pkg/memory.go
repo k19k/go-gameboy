@@ -87,6 +87,7 @@ type memory struct {
 	mbcType int
 
 	config *Config
+	quit   bool
 
 	sys   *cpu
 	lcd   *display
@@ -532,13 +533,20 @@ func (m *memory) dma(src uint16) {
 func (m *memory) monitorEvents() {
 	for {
 		event := <-sdl.Events
-		if e, ok := event.(sdl.KeyboardEvent); ok {
-			m.updateKeys(e)
+		switch ev := event.(type) {
+		case sdl.QuitEvent:
+			m.quit = true
+		case sdl.KeyboardEvent:
+			m.updateKeys(&ev)
+		case sdl.JoyAxisEvent:
+			m.updateDPad(&ev)
+		case sdl.JoyButtonEvent:
+			m.updateButtons(&ev)
 		}
 	}
 }
 
-func (m *memory) updateKeys(ev sdl.KeyboardEvent) {
+func (m *memory) updateKeys(ev *sdl.KeyboardEvent) {
 	// TODO trigger interrupts
 	switch ev.Type {
 	case sdl.KEYUP:
@@ -578,6 +586,60 @@ func (m *memory) updateKeys(ev sdl.KeyboardEvent) {
 			m.btnBits &^= 0x02
 		case sdl.K_x:
 			m.btnBits &^= 0x01
+		}
+	}
+}
+
+func (m *memory) updateDPad(ev *sdl.JoyAxisEvent) {
+	switch int(ev.Axis) {
+	case m.config.JoyAxisX:
+		switch {
+		case ev.Value > 3200:
+			m.dpadBits &^= 0x01
+			m.dpadBits |= 0x02
+		case ev.Value < -3200:
+			m.dpadBits |= 0x01
+			m.dpadBits &^= 0x02
+		default:
+			m.dpadBits |= 0x03
+		}
+	case m.config.JoyAxisY:
+		switch {
+		case ev.Value > 3200:
+			m.dpadBits |= 0x04
+			m.dpadBits &^= 0x08
+		case ev.Value < -3200:
+			m.dpadBits &^= 0x04
+			m.dpadBits |= 0x08
+		default:
+			m.dpadBits |= 0x0C
+		}
+	}
+}
+
+func (m *memory) updateButtons(ev *sdl.JoyButtonEvent) {
+	switch ev.Type {
+	case sdl.JOYBUTTONUP:
+		switch int(ev.Button) {
+		case m.config.JoyButtonA:
+			m.btnBits |= 0x01
+		case m.config.JoyButtonB:
+			m.btnBits |= 0x02
+		case m.config.JoyButtonSelect:
+			m.btnBits |= 0x04
+		case m.config.JoyButtonStart:
+			m.btnBits |= 0x08
+		}
+	case sdl.JOYBUTTONDOWN:
+		switch int(ev.Button) {
+		case m.config.JoyButtonA:
+			m.btnBits &^= 0x01
+		case m.config.JoyButtonB:
+			m.btnBits &^= 0x02
+		case m.config.JoyButtonSelect:
+			m.btnBits &^= 0x04
+		case m.config.JoyButtonStart:
+			m.btnBits &^= 0x08
 		}
 	}
 }

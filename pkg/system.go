@@ -18,6 +18,14 @@ type Config struct {
 	Scale        int
 	AudioFreq    int
 	AudioBuffers int
+
+	Joystick        int
+	JoyButtonA      int
+	JoyButtonB      int
+	JoyButtonStart  int
+	JoyButtonSelect int
+	JoyAxisX        int
+	JoyAxisY        int
 }
 
 func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
@@ -36,7 +44,7 @@ func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
 		rom.printInfo()
 	}
 
-	if sdl.Init(sdl.INIT_VIDEO|sdl.INIT_AUDIO) != 0 {
+	if sdl.Init(sdl.INIT_VIDEO|sdl.INIT_AUDIO|sdl.INIT_JOYSTICK) != 0 {
 		err = sdl.GetError()
 		return
 	}
@@ -62,6 +70,11 @@ func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
 
 	mem.connect(sys, lcd, audio)
 
+	joy := openJoystick(&cfg)
+	if joy != nil {
+		defer joy.Close()
+	}
+
 	go mem.monitorEvents()
 
 	run(&cfg, sys, in)
@@ -86,7 +99,7 @@ func run(cfg *Config, sys *cpu, in <-chan int) {
 	t := 0
 	for {
 		if t >= refreshTicks {
-			if _, ok := <-in; ok {
+			if _, ok := <-in; ok || sys.quit {
 				return
 			}
 			t = 0
@@ -101,6 +114,40 @@ func run(cfg *Config, sys *cpu, in <-chan int) {
 		sys.audio.step(s)
 		t += s
 	}
+}
+
+func openJoystick(cfg *Config) (joy *sdl.Joystick) {
+	n := sdl.NumJoysticks()
+	if n == 0 {
+		if cfg.Verbose {
+			fmt.Println("no joysticks")
+		}
+		return
+	}
+
+	if cfg.Joystick >= n {
+		if cfg.Verbose {
+			fmt.Printf("no such joystick: %d (found %d)\n",
+				cfg.Joystick, n)
+		}
+		return
+	}
+
+	joy = sdl.JoystickOpen(cfg.Joystick)
+	if joy == nil {
+		fmt.Fprintf(os.Stderr,
+			"failed to open joystick: %v\n",
+			sdl.GetError())
+		return
+	}
+
+	sdl.JoystickEventState(sdl.ENABLE)
+
+	if cfg.Verbose {
+		fmt.Printf("using joystick %d\n", cfg.Joystick)
+	}
+
+	return joy
 }
 
 func (rom romImage) printInfo() {
