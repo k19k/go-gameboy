@@ -357,6 +357,9 @@ func (m *memory) writePort(addr uint16, x byte) {
 			m.audio.ch1.volumeDir = -1
 		}
 		m.audio.ch1.volumeTime = int(x & 0x07)
+		if m.audio.ch1.volumeInit == 0 {
+			m.audio.ch1.volume = 0
+		}
 	case portNR13:
 		freq := int(m.hram[portNR14-0xFF00]&0x07) << 8
 		freq |= int(x)
@@ -377,6 +380,9 @@ func (m *memory) writePort(addr uint16, x byte) {
 			m.audio.ch2.volumeDir = -1
 		}
 		m.audio.ch1.volumeTime = int(x & 0x07)
+		if m.audio.ch2.volumeInit == 0 {
+			m.audio.ch2.volume = 0
+		}
 	case portNR23:
 		freq := int(m.hram[portNR24-0xFF00]&0x07) << 8
 		freq |= int(x)
@@ -412,6 +418,9 @@ func (m *memory) writePort(addr uint16, x byte) {
 			m.audio.ch4.volumeDir = -1
 		}
 		m.audio.ch4.volumeTime = int(x & 0x07)
+		if m.audio.ch4.volumeInit == 0 {
+			m.audio.ch4.volume = 0
+		}
 	case portNR43:
 		m.audio.ch4.shiftClockFreq = uint(x >> 4)
 		m.audio.ch4.counterStepWidth = 15
