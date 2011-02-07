@@ -50,9 +50,9 @@ func (ch *sound) step() {
 		ch.active = true
 		ch.volume = ch.volumeInit
 		ch.clock = 0
-	case ch.clock < (64 - ch.length):
+	case ch.loop || ch.clock < (64-ch.length):
 		ch.clock++
-	case !ch.loop:
+	default:
 		ch.active = false
 	}
 
@@ -236,9 +236,9 @@ func (ch *wave) step(afreq int) {
 		ch.active = true
 		ch.clock = 0
 		ch.phase = 0
-	case ch.clock < (256 - ch.length):
+	case ch.loop || ch.clock < (256-ch.length):
 		ch.clock++
-	case !ch.loop:
+	default:
 		ch.active = false
 	}
 
