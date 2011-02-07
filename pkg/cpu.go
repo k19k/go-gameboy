@@ -40,7 +40,14 @@ func (sys *cpu) String() string {
 }
 
 func (sys *cpu) step() int {
-	t := 4
+	if sys.ime {
+		f := sys.readPort(portIF)
+		e := sys.readPort(portIE)
+		mask := f & e & 0x1F
+		if mask != 0 {
+			return sys.irq(mask, f)
+		}
+	}
 	if !sys.halt {
 		if sys.pc >= 0x8000 && sys.pc < 0xFF80 &&
 			sys.pc < 0xC000 && sys.pc >= 0xFE00 {
@@ -48,18 +55,9 @@ func (sys *cpu) step() int {
 		}
 		sys.mar = sys.pc
 		//fmt.Printf("%04X %s\n", sys.pc, sys.disasm(sys.pc))
-		t = sys.fdx()
+		return sys.fdx()
 	}
-	if sys.ime {
-		f := sys.readPort(portIF)
-		e := sys.readPort(portIE)
-		mask := f & e & 0x1F
-		if mask != 0 {
-			t += sys.irq(mask, f)
-		}
-	}
-	sys.updateTimers(t)
-	return t
+	return 4
 }
 
 func (sys *cpu) irq(mask, f byte) int {

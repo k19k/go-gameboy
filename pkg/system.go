@@ -91,8 +91,11 @@ func run(cfg *Config, sys *cpu, in <-chan int) {
 			}
 			t = 0
 		}
-		var s int
-		for s = 0; s < 10; s += sys.step() {
+		s := 0
+		for s < 10 {
+			ts := sys.step()
+			sys.updateTimers(ts)
+			s += ts
 		}
 		sys.lcd.step(s)
 		sys.audio.step(s)
