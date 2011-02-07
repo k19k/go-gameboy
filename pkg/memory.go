@@ -547,7 +547,6 @@ func (m *memory) monitorEvents() {
 }
 
 func (m *memory) updateKeys(ev *sdl.KeyboardEvent) {
-	// TODO trigger interrupts
 	switch ev.Type {
 	case sdl.KEYUP:
 		switch ev.Keysym.Sym {
@@ -572,20 +571,28 @@ func (m *memory) updateKeys(ev *sdl.KeyboardEvent) {
 		switch ev.Keysym.Sym {
 		case sdl.K_DOWN:
 			m.dpadBits &^= 0x08
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_UP:
 			m.dpadBits &^= 0x04
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_LEFT:
 			m.dpadBits &^= 0x02
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_RIGHT:
 			m.dpadBits &^= 0x01
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_RETURN:
 			m.btnBits &^= 0x08
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_RSHIFT:
 			m.btnBits &^= 0x04
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_z:
 			m.btnBits &^= 0x02
+			m.hram[portIF-0xFF00] |= 0x10
 		case sdl.K_x:
 			m.btnBits &^= 0x01
+			m.hram[portIF-0xFF00] |= 0x10
 		}
 	}
 }
@@ -597,9 +604,11 @@ func (m *memory) updateDPad(ev *sdl.JoyAxisEvent) {
 		case ev.Value > 3200:
 			m.dpadBits &^= 0x01
 			m.dpadBits |= 0x02
+			m.hram[portIF-0xFF00] |= 0x10
 		case ev.Value < -3200:
 			m.dpadBits |= 0x01
 			m.dpadBits &^= 0x02
+			m.hram[portIF-0xFF00] |= 0x10
 		default:
 			m.dpadBits |= 0x03
 		}
@@ -608,9 +617,11 @@ func (m *memory) updateDPad(ev *sdl.JoyAxisEvent) {
 		case ev.Value > 3200:
 			m.dpadBits |= 0x04
 			m.dpadBits &^= 0x08
+			m.hram[portIF-0xFF00] |= 0x10
 		case ev.Value < -3200:
 			m.dpadBits &^= 0x04
 			m.dpadBits |= 0x08
+			m.hram[portIF-0xFF00] |= 0x10
 		default:
 			m.dpadBits |= 0x0C
 		}
@@ -634,12 +645,16 @@ func (m *memory) updateButtons(ev *sdl.JoyButtonEvent) {
 		switch int(ev.Button) {
 		case m.config.JoyButtonA:
 			m.btnBits &^= 0x01
+			m.hram[portIF-0xFF00] |= 0x10
 		case m.config.JoyButtonB:
 			m.btnBits &^= 0x02
+			m.hram[portIF-0xFF00] |= 0x10
 		case m.config.JoyButtonSelect:
 			m.btnBits &^= 0x04
+			m.hram[portIF-0xFF00] |= 0x10
 		case m.config.JoyButtonStart:
 			m.btnBits &^= 0x08
+			m.hram[portIF-0xFF00] |= 0x10
 		}
 	}
 }
