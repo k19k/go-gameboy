@@ -21,8 +21,13 @@ const (
 //   log(i+1) * max
 // where the log base is the number of steps, i is the index and max
 // is the relevant maximum.
-var volstep []int16
-var mvolstep []int16
+var volstep = []int16{
+	0, 1500, 2377, 3000, 3483, 3877, 4211, 4500,
+	4755, 4983, 5189, 5377, 5551, 5711, 5860, 6000,
+}
+var mvolstep = []int16{
+	0, 8000, 12680, 16000, 18575, 20680, 22459, 24000,
+}
 
 type sound struct {
 	length     int
@@ -436,16 +441,5 @@ func runAudio(send <-chan []int16, status <-chan bool, quit chan int) {
 			quit <- 1
 			return
 		}
-	}
-}
-
-func init() {
-	// Pre-calculated tables. Numbers are rounded (not truncated).
-	volstep = []int16{
-		0, 1500, 2377, 3000, 3483, 3877, 4211, 4500,
-		4755, 4983, 5189, 5377, 5551, 5711, 5860, 6000,
-	}
-	mvolstep = []int16{
-		0, 8000, 12680, 16000, 18575, 20680, 22459, 24000,
 	}
 }
