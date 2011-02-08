@@ -93,6 +93,7 @@ func newDisplay(m *memory) *display {
 	lcd.pal[1] = sdl.MapRGBA(lcd.Format, 0x8B, 0xAC, 0x0F, 0)
 	lcd.pal[2] = sdl.MapRGBA(lcd.Format, 0x30, 0x62, 0x30, 0)
 	lcd.pal[3] = sdl.MapRGBA(lcd.Format, 0x0F, 0x38, 0x0F, 0)
+	sdl.ShowCursor(sdl.DISABLE)
 	lcd.FillRect(nil, lcd.pal[0])
 	lcd.Flip()
 	lcd.frameTime = time.Nanoseconds()
