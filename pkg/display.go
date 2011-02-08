@@ -103,6 +103,10 @@ func newDisplay(m *memory) *display {
 	return &lcd
 }
 
+func (lcd *display) toggleFullScreen() {
+	sdl.WM_ToggleFullScreen(lcd.Surface)
+}
+
 func (lcd *display) step(t int) {
 	lcd.clock += t
 	if lcd.clock >= refreshTicks {

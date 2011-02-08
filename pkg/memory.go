@@ -593,6 +593,10 @@ func (m *memory) updateKeys(ev *sdl.KeyboardEvent) {
 		case sdl.K_x:
 			m.btnBits &^= 0x01
 			m.hram[portIF-0xFF00] |= 0x10
+		case sdl.K_ESCAPE:
+			m.quit = true
+		case sdl.K_F11:
+			m.lcd.toggleFullScreen()
 		}
 	}
 }
