@@ -242,7 +242,14 @@ func (ch *wave) step(afreq int) {
 		ch.active = false
 	}
 
+	if ch.freq == 0 {
+		ch.active = false
+		return
+	}
 	ch.period = afreq / ch.freq
+	if ch.period < 2 {
+		ch.period = 2
+	}
 }
 
 func (ch *wave) mix(buf []int16, onleft, onright int16, mem *memory) {
