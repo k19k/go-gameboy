@@ -18,6 +18,7 @@ type Config struct {
 	Scale        int
 	AudioFreq    int
 	AudioBuffers int
+	Fullscreen   bool
 
 	Joystick        int
 	JoyButtonA      int

@@ -84,6 +84,7 @@ func init() {
 	flag.IntVar(&config.Scale, "scale", 2, "display scaling factor")
 	flag.IntVar(&config.AudioFreq, "freq", 48000, "audio rate")
 	flag.IntVar(&config.AudioBuffers, "nbuf", 4, "audio buffers")
+	flag.BoolVar(&config.Fullscreen, "fs", false, "run in fullscreen mode")
 	flag.IntVar(&config.Joystick, "joystick", 0, "which joystick to use")
 	flag.IntVar(&config.JoyButtonA, "joy-a", 1, "joystick A button")
 	flag.IntVar(&config.JoyButtonB, "joy-b", 0, "joystick B button")

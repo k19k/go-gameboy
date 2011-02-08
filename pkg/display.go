@@ -84,11 +84,14 @@ type display struct {
 
 func newDisplay(m *memory) *display {
 	sdl.WM_SetCaption(m.rom.title(), "")
+	flags := uint32(sdl.DOUBLEBUF)
+	if m.config.Fullscreen {
+		flags |= sdl.FULLSCREEN
+	}
 	lcd := display{memory: m}
 	lcd.screenW = displayW * m.config.Scale
 	lcd.screenH = displayH * m.config.Scale
-	lcd.Surface = sdl.SetVideoMode(lcd.screenW, lcd.screenH, 0,
-		sdl.DOUBLEBUF)
+	lcd.Surface = sdl.SetVideoMode(lcd.screenW, lcd.screenH, 0, flags)
 	lcd.pal[0] = sdl.MapRGBA(lcd.Format, 0x9B, 0xBC, 0x0F, 0)
 	lcd.pal[1] = sdl.MapRGBA(lcd.Format, 0x8B, 0xAC, 0x0F, 0)
 	lcd.pal[2] = sdl.MapRGBA(lcd.Format, 0x30, 0x62, 0x30, 0)
