@@ -61,7 +61,7 @@ func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
 	}
 
 	var audio *mixer
-	if audio, err = NewMixer(mem); err != nil {
+	if audio, err = newMixer(mem); err != nil {
 		return
 	}
 	defer audio.close()

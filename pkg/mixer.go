@@ -304,7 +304,7 @@ type mixer struct {
 	ch4 noise
 }
 
-func NewMixer(mem *memory) (mix *mixer, err interface{}) {
+func newMixer(mem *memory) (mix *mixer, err interface{}) {
 	spec := audio.AudioSpec{
 		Freq:     mem.config.AudioFreq,
 		Format:   audio.AUDIO_S16SYS,
