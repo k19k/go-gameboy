@@ -76,7 +76,7 @@ type display struct {
 	lineBuf [displayW]byte
 
 	// When rendering a scanline this is zeroed out, then
-	// logical-ORed with the pixels from the BG and window. This
+	// bitwise-ORed with the pixels from the BG and window. This
 	// is then used to lookup which pixels can be painted in
 	// sprites that are to be obscured by the background layers.
 	oamLineMask [displayW]byte
