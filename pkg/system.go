@@ -101,8 +101,13 @@ func run(cfg *Config, sys *cpu, in <-chan int) {
 	t := 0
 	for {
 		if t >= refreshTicks {
-			if _, ok := <-in; ok || sys.quit {
+			select {
+			case <-in:
 				return
+			default:
+				if sys.quit {
+					return
+				}
 			}
 			t = 0
 		}
