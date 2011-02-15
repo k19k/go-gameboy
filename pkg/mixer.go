@@ -6,8 +6,7 @@ package gameboy
 
 import (
 	"fmt"
-	"⚛sdl"
-	"⚛sdl/audio"
+	"ao"
 )
 
 const (
@@ -282,8 +281,10 @@ func (ch *wave) mix(buf []int16, onleft, onright int16, mem *memory) {
 }
 
 type mixer struct {
-	audio.AudioSpec
+	ao.SampleFormat
 	*memory
+
+	dev *ao.Device
 
 	clock int
 
@@ -312,14 +313,26 @@ type mixer struct {
 }
 
 func newMixer(mem *memory) (mix *mixer, err interface{}) {
-	spec := audio.AudioSpec{
-		Freq:     mem.config.AudioFreq,
-		Format:   audio.AUDIO_S16SYS,
-		Channels: 2,
-		Samples:  2048}
+	format := ao.SampleFormat{
+		Bits:       16,
+		Rate:       mem.config.AudioFreq,
+		Channels:   2,
+		ByteFormat: ao.FormatNative,
+		Matrix:     "L,R",
+	}
 
-	if audio.OpenAudio(&spec, &spec) != 0 {
-		return nil, sdl.GetError()
+	ao.Initialize()
+
+	id := ao.DriverID(mem.config.AudioDriver)
+	if id < 0 {
+		id = ao.DefaultDriverID()
+	}
+
+	var device *ao.Device
+	device, err = ao.OpenLive(id, &format)
+	if err != nil {
+		ao.Shutdown()
+		return
 	}
 
 	if mem.config.AudioBuffers < 3 {
@@ -327,18 +340,20 @@ func newMixer(mem *memory) (mix *mixer, err interface{}) {
 	}
 
 	if mem.config.Verbose {
+		info, _ := ao.DriverInfo(id)
 		fmt.Println("Opened audio:")
-		fmt.Printf("  rate:        %dHz\n", spec.Freq)
-		fmt.Printf("  channels:    %d\n", spec.Channels)
-		fmt.Printf("  buffer size: %d samples\n", spec.Samples)
+		fmt.Printf("  driver:      [%s] %s\n", info.ShortName, info.Name)
+		fmt.Printf("  rate:        %dHz\n", format.Rate)
+		fmt.Printf("  channels:    %d\n", format.Channels)
+		fmt.Printf("  buffer size: %d samples\n", 1024)
 		fmt.Printf("  buffers:     %d\n", mem.config.AudioBuffers)
 	}
 
-	mix = &mixer{AudioSpec: spec, memory: mem}
+	mix = &mixer{SampleFormat: format, dev: device, memory: mem}
 
 	mix.buf = make([][]int16, mem.config.AudioBuffers)
 	for i := 0; i < len(mix.buf); i++ {
-		mix.buf[i] = make([]int16, mix.Samples*2)
+		mix.buf[i] = make([]int16, 1024*2)
 	}
 
 	mix.ch4.initialize()
@@ -347,7 +362,7 @@ func newMixer(mem *memory) (mix *mixer, err interface{}) {
 	mix.status = make(chan bool)
 	mix.quit = make(chan int)
 
-	go runAudio(mix.send, mix.status, mix.quit)
+	go mix.runAudio()
 
 	return mix, nil
 }
@@ -366,16 +381,16 @@ func (mix *mixer) step(t int) {
 	mix.clock += t
 	if mix.clock >= mixerStepTicks {
 		mix.clock -= mixerStepTicks
-		mix.ch1.step(mix.Freq)
-		mix.ch2.step(mix.Freq)
-		mix.ch3.step(mix.Freq)
-		mix.ch4.step(mix.Freq)
+		mix.ch1.step(mix.Rate)
+		mix.ch2.step(mix.Rate)
+		mix.ch3.step(mix.Rate)
+		mix.ch4.step(mix.Rate)
 		mix.mix()
 	}
 }
 
 func (mix *mixer) mix() {
-	frames := 2 * (mixerStepTicks * uint(mix.Freq) / ticksFreq)
+	frames := 2 * (mixerStepTicks * uint(mix.Rate) / ticksFreq)
 	size := uint(len(mix.buf[mix.bufi]))
 	if mix.frame+frames >= size {
 		slice := size - mix.frame
@@ -428,19 +443,20 @@ func (mix *mixer) next() {
 	mix.frame = 0
 }
 
-func runAudio(send <-chan []int16, status <-chan bool, quit chan int) {
+func (mix *mixer) runAudio() {
 	pause := false
 	for {
 		select {
-		case buf := <-send:
+		case buf := <-mix.send:
 			if !pause {
-				audio.SendAudio_int16(buf)
+				mix.dev.Play16(buf)
 			}
-		case pause = <-status:
-			audio.PauseAudio(pause)
-		case <-quit:
-			audio.CloseAudio()
-			quit <- 1
+		case pause = <-mix.status:
+			// okay, pause updated
+		case <-mix.quit:
+			mix.dev.Close()
+			ao.Shutdown()
+			mix.quit <- 1
 			return
 		}
 	}

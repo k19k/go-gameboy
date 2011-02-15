@@ -21,6 +21,9 @@ Requirements
   Go-SDL (⚛sdl version)
   https://github.com/0xe2-0x9a-0x9b/Go-SDL
 
+  go-ao
+  https://github.com/k19k/go-ao
+
 Currently supported features:
 
   - ROMs with MBC chips type 1, 2, or 3 (or none)
