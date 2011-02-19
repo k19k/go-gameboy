@@ -151,23 +151,22 @@ func (lcd *display) step(t int) {
 		}
 		lcd.writePort(portIF, irq|0x01)
 		lcd.Flip()
-
-		// while audio is playing, we let it control the
-		// emulation speed
-		if !lcd.audio.enable {
-			lcd.delay()
-		}
+		lcd.delay()
 	}
 
 	lcd.writePort(portSTAT, stat)
 }
 
 func (lcd *display) delay() {
-	now := time.Nanoseconds()
-	delta := now - lcd.frameTime
-	target := 16742706 - delta
-	if target > 0 {
-		time.Sleep(target)
+	// while audio is playing, we let it control the
+	// emulation speed
+	if !lcd.audio.enable {
+		now := time.Nanoseconds()
+		delta := now - lcd.frameTime
+		target := 16742706 - delta
+		if target > 0 {
+			time.Sleep(target)
+		}
 	}
 	lcd.frameTime = time.Nanoseconds()
 }
