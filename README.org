@@ -1,47 +1,49 @@
-* go-gameboy: a Game Boy emulator written in Go
+#+TITLE: go-gameboy
+#+AUTHOR: Kevin Bulušek
+#+DESCRIPTION: a Game Boy emulator written in Go
+#+OPTIONS: num:nil toc:nil
+#+STARTUP: showeverything
 
-Very much a work in progress. At the moment some ROMs will not even
-make it past the title screen (or even get that far). The majority
-that I have tried do work however.
+* Description
 
-The current fixed configuration uses these controls:
+  Very much a work in progress. At the moment some ROMs will not even
+  make it past the title screen (or even get that far). The majority
+  that I have tried do work however.
 
-  A Button: x
-  B Button: z
-  Start: return
-  Select: right shift
-  D-Pad: arrow keys
+  The current fixed configuration uses these controls:
 
-  Escape quits the emulator.
-  F11 toggles fullscreen mode.
+  | Button | Key         | Description             |
+  |--------+-------------+-------------------------|
+  | A      | x           |                         |
+  | B      | z           |                         |
+  | Start  | return      |                         |
+  | Select | right shift |                         |
+  | D-Pad  | arrow keys  |                         |
+  |        | escape      | Quits the emulator      |
+  |        | F11         | Toggles fullscreen mode |
 
-Configurable joystick/gamepad controls are also supported. The
-command:
-
+  Configurable joystick/gamepad controls are also supported. The
+  command:
 #+begin_src sh
   go-gameboy 2>&1 | grep joy
 #+end_src
-
-will display the relevant options.
+  will display the relevant options.
 
 ** Requirements
 
-  - Go-SDL (⚛sdl version)
-    https://github.com/0xe2-0x9a-0x9b/Go-SDL
-
-  - go-ao
-    https://github.com/k19k/go-ao
+   - [[https://github.com/0xe2-0x9a-0x9b/Go-SDL][Go-SDL (⚛sdl version)]]
+   - [[https://github.com/k19k/go-ao][go-ao]]
 
 ** Currently supported features:
 
-  - ROMs with MBC chips type 1, 2, or 3 (or none)
-  - SDL graphics and input
-  - Sound emulation
-  - Battery-backed RAM saving
-  - Joystick/gamepad input
+   - ROMs with MBC chips type 1, 2, or 3 (or none)
+   - SDL graphics and input
+   - Sound emulation
+   - Battery-backed RAM saving
+   - Joystick/gamepad input
 
 ** Some missing things:
 
-  - Configurable keyboard input
-  - MBC RTC support
-  - Other MBC types
+   - Configurable keyboard input
+   - MBC RTC support
+   - Other MBC types
