@@ -1,5 +1,4 @@
-go-gameboy: a Game Boy emulator written in Go
-=============================================
+* go-gameboy: a Game Boy emulator written in Go
 
 Very much a work in progress. At the moment some ROMs will not even
 make it past the title screen (or even get that far). The majority
@@ -16,23 +15,33 @@ The current fixed configuration uses these controls:
   Escape quits the emulator.
   F11 toggles fullscreen mode.
 
-Requirements
+Configurable joystick/gamepad controls are also supported. The
+command:
 
-  Go-SDL (⚛sdl version)
-  https://github.com/0xe2-0x9a-0x9b/Go-SDL
+#+begin_src sh
+  go-gameboy 2>&1 | grep joy
+#+end_src
 
-  go-ao
-  https://github.com/k19k/go-ao
+will display the relevant options.
 
-Currently supported features:
+** Requirements
+
+  - Go-SDL (⚛sdl version)
+    https://github.com/0xe2-0x9a-0x9b/Go-SDL
+
+  - go-ao
+    https://github.com/k19k/go-ao
+
+** Currently supported features:
 
   - ROMs with MBC chips type 1, 2, or 3 (or none)
   - SDL graphics and input
   - Sound emulation
   - Battery-backed RAM saving
+  - Joystick/gamepad input
 
-Some missing things:
+** Some missing things:
 
-  - Configurable input
+  - Configurable keyboard input
   - MBC RTC support
   - Other MBC types
