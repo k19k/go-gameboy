@@ -24,9 +24,9 @@
 
   Configurable joystick/gamepad controls are also supported. The
   command:
-#+begin_src sh
+#+begin_example
   go-gameboy 2>&1 | grep joy
-#+end_src
+#+end_example
   will display the relevant options.
 
 ** Requirements
