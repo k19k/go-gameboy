@@ -98,28 +98,20 @@ func run(cfg *Config, sys *cpu, in <-chan int) {
 		}
 	}()
 
-	t := 0
-	for {
-		if t >= refreshTicks {
-			select {
-			case <-in:
-				return
-			default:
-				if sys.quit {
-					return
-				}
-			}
-			t = 0
+	for !sys.quit {
+		for t := 0; t < refreshTicks; {
+			s := sys.step()
+			sys.updateTimers(s)
+			sys.lcd.step(s)
+			sys.audio.step(s)
+			t += s
 		}
-		s := 0
-		for s < 10 {
-			ts := sys.step()
-			sys.updateTimers(ts)
-			s += ts
+		select {
+		case <-in:
+			sys.quit = true
+		default:
+			// non-blocking
 		}
-		sys.lcd.step(s)
-		sys.audio.step(s)
-		t += s
 	}
 }
 
