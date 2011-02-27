@@ -46,7 +46,7 @@ func Start(path string, cfg Config, in <-chan int, out chan<- interface{}) {
 		rom.printInfo()
 	}
 
-	if sdl.Init(sdl.INIT_VIDEO|sdl.INIT_AUDIO|sdl.INIT_JOYSTICK) != 0 {
+	if sdl.Init(sdl.INIT_VIDEO|sdl.INIT_JOYSTICK) != 0 {
 		err = sdl.GetError()
 		return
 	}
